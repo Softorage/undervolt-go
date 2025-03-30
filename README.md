@@ -2,6 +2,8 @@
 
 **undervolt-go** is a Go port of the original [undervolt](https://github.com/georgewhewell/undervolt) utility, designed to allow users to undervolt Intel CPUs on Linux systems. Undervolting can help reduce CPU temperatures, decrease power consumption, and potentially increase system stability and longevity. **undervolt-go** gives the advantage of running the application without the need for any dependencies.
 
+*A heads up. This project is a port of undervolt written in Python. AI has been used when developing this project.*
+
 ## Table of Contents
 
 - [Introduction](#introduction)
