@@ -1,6 +1,6 @@
 # undervolt-go
 
-**undervolt-go** is a Go port of the original [undervolt](https://github.com/georgewhewell/undervolt) utility, designed to allow users to undervolt Intel CPUs on Linux systems. Undervolting can help reduce CPU temperatures, decrease power consumption, and potentially increase system stability and longevity.
+**undervolt-go** is a Go port of the original [undervolt](https://github.com/georgewhewell/undervolt) utility, designed to allow users to undervolt Intel CPUs on Linux systems. Undervolting can help reduce CPU temperatures, decrease power consumption, and potentially increase system stability and longevity. **undervolt-go** gives the advantage of running the application without the need for any dependencies.
 
 ## Table of Contents
 
@@ -131,13 +131,16 @@ To install **undervolt-go** on your system, follow these steps:
 
 ## Dependencies
 
-- **Linux Kernel with MSR Support:** Ensure that the `msr` kernel module is loaded. You can load it using:
+- **For usage**
+  - **No dependencies are required.**
+  - **Linux Kernel with MSR Support:** Ensure that the `msr` kernel module is loaded. You can load it using:
 
-  ```bash
-  sudo modprobe msr
-  ```
-
-- **Go Programming Language:** Required for building the application. Download and install from the [official Go website](https://golang.org/dl/).
+    ```bash
+    sudo modprobe msr
+    ```
+  - **Root Privileges:** Ensure you have root privileges to interact with the CPU's model-specific registers (MSRs).
+- **For building**
+  - **Go Programming Language:** Required for building the application. Download and install from the [official Go website](https://golang.org/dl/).
 
 ## Configuration
 
