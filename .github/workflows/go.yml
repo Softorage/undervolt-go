@@ -49,7 +49,7 @@ jobs:
         echo "Working on making the compiled binary available..."
         mkdir public
         cp -r ./undervolt-go ./public/ # Copy the binary to the public directory
-        cp -r ./dist/script/ ./public/ # Copy the install scripts to the public directory
+        cp -r ./dist/script/* ./public/ # Copy the install scripts to the public directory
         echo "Ready to deploy!"
     - name: Output the files structure into a JSON file
       run: |
@@ -59,7 +59,7 @@ jobs:
         echo "JSON Manifest generated with the directory structure!"
     - name: Make web pages available
       run: |
-        cp -r ./dist/pages/ ./public/ # Copy the web pages to the public directory
+        cp -r ./dist/pages/* ./public/ # Copy the web pages to the public directory
     - name: Upload artifact
       # upload artifact in the build stage, so that it is later on accessible in the deploy stage
       uses: actions/upload-pages-artifact@v3
