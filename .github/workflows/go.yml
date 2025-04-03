@@ -53,8 +53,9 @@ jobs:
         echo "Ready to deploy!"
     - name: Output the files structure into a JSON file
       run: |
-        sudo apt update
-        sudo apt install -y tree
+        # GitHub Actions' ubuntu-latest comes preinstalled with tree. So no need to install tree.
+        #sudo apt update
+        #sudo apt install -y tree
         tree -J public > ./public/files.json
         echo "JSON Manifest generated with the directory structure!"
     - name: Make web pages available
