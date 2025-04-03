@@ -61,13 +61,16 @@ To build **undervolt-go**, follow these steps:
 ## Installation
 
 To install **undervolt-go** on your system, follow these steps:
-1. Download latest release from GitHub Releases.
-2. Extract the archive
-3. Simply make install-undervolt.sh executable
+1. Download latest release from [offical nightly builds](https://softorage.github.io/undervolt-go/)
+2. Extract the archive. You should now have the following files:
+  1. undervolt-go
+  2. install-undervolt.sh
+  3. update-undervolt.sh
+3. Simply make install-undervolt.sh executable (or update-undervolt.sh if you already have it):
    - `chmod +x install-undervolt.sh`
    - or you can right click install-undervolt.sh, go to Properties, and in the Permissions tab, tick 'Make executable'
 4. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go
-5. Run install-undervolt.sh with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
+5. Run install-undervolt.sh (or update-undervolt.sh) with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
    `sudo ./install-undervolt.sh`
 
 ## Usage

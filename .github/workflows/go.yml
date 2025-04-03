@@ -47,16 +47,21 @@ jobs:
     - name: Make compiled binary available
       run: |
         echo "Working on making the compiled binary available..."
-        mkdir public
-        cp -r ./undervolt-go ./public/ # Copy the binary to the public directory
-        cp -r ./dist/script/* ./public/ # Copy the install scripts to the public directory
+        mkdir latest-build staging public
+        cp -r ./undervolt-go ./latest-build/ # Copy the binary to the latest-build directory
+        cp -r ./dist/script/* ./latest-build/ # Copy the install scripts to the latest-build directory
         echo "Ready to deploy!"
+    - name: Compress the 'latest-build' under 'staging' directory and make it available in 'public'
+      run: |
+        zip -r staging/undervolt-go.zip ./latest-build/ # Make a zip file of the latest build
+        cp -r staging/undervolt-go.zip ./public/
+        echo "Compress complete and available in public directory!"
     - name: Output the files structure into a JSON file
       run: |
         # GitHub Actions' ubuntu-latest comes preinstalled with tree. So no need to install tree.
         #sudo apt update
         #sudo apt install -y tree
-        tree -J public > ./public/files.json
+        tree -J staging > ./public/files.json
         echo "JSON Manifest generated with the directory structure!"
     - name: Make web pages available
       run: |
