@@ -35,19 +35,33 @@ jobs:
         go-version: '1.24.1'
     - name: Setup Pages
       uses: actions/configure-pages@v5
-    - name: Build
+    - name: Prepare dependencies
       run: |
         go mod tidy # Ensures all required dependencies are installed
         echo "All required dependencies are installed"
+    - name: Build undervolt-go
+      run: |
         echo "Building undervolt-go..."
         go build -ldflags="-X 'main.version=$(git describe --tags)'" -o undervolt-go main.go # When building your application, pass the version from git tags using ldflags.
         echo "Build complete!"
+    - name: Make compiled binary available
+      run: |
         echo "Working on making the compiled binary available..."
         mkdir public
         cp -r ./undervolt-go ./public/ # Copy the binary to the public directory
-        cp -r ./install/ ./public/ # Copy the scripts in the install directory to the public directory
+        cp -r ./dist/script/ ./public/ # Copy the install scripts to the public directory
         echo "Ready to deploy!"
+    - name: Output the files structure into a JSON file
+      run: |
+        sudo apt update
+        sudo apt install -y tree
+        tree -J public > ./public/files.json
+        echo "JSON Manifest generated with the directory structure!"
+    - name: Make web pages available
+      run: |
+        cp -r ./dist/pages/ ./public/ # Copy the web pages to the public directory
     - name: Upload artifact
+      # upload artifact in the build stage, so that it is later on accessible in the deploy stage
       uses: actions/upload-pages-artifact@v3
       with:
         # Upload entire repository
