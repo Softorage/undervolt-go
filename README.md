@@ -2,7 +2,9 @@
 
 **undervolt-go** is a Go port of the original [undervolt](https://github.com/georgewhewell/undervolt) utility, designed to allow users to undervolt Intel CPUs on Linux systems. Undervolting can help reduce CPU temperatures, decrease power consumption, and potentially increase system stability and longevity. **undervolt-go** gives the advantage of running the application without the need for any dependencies.
 
-*A heads up. This project is a port of undervolt written in Python. AI has been used when developing this project.*
+_**Note:**_
+- *Please use this software with caution. It can damage you computer.*
+- *We may use AI when developing this project.*
 
 ## Table of Contents
 
@@ -49,7 +51,7 @@ To build **undervolt-go**, follow these steps:
 4. **Run the application:**
 
    ```bash
-   sudo ./undervolt-go -h
+   sudo ./undervolt-go --help
    sudo ./undervolt-go --read
    ```
 
@@ -75,54 +77,45 @@ To install **undervolt-go** on your system, follow these steps:
 1. To apply a voltage offset, use the following syntax:
   
    ```bash
-   sudo ./undervolt-go --core -100 --cache -100 --gpu -50
+   sudo ./undervolt-go --core=-100 --cache=-50 --gpu=-50
    ```
    
-   This command applies a -100 mV offset to both the CPU core and cache, and a -50 mV offset to the GPU.
+   This command applies a -100 mV offset to the CPU core, -50 mV to the CPU cache, and a -50 mV offset to the GPU.
 
 2. This command applies a 40W power limit to PL1 and a 32s time window. PL1 is the long term power limit, that can be safe for longer periods.
    
    ```bash
-   sudo undervolt -p1 40 32
+   sudo ./undervolt-go --p1=40,32
    ```
 
 3. This command applies a 60W power limit to PL2 and a 32s time window. PL2 is the short term power limit, that can be safe for shorter periods and is useful for short bursts of performance.
    
    ```bash
-   sudo undervolt -p2 60 32
+   sudo ./undervolt-go --p2=60,32
    ```
 
 4. All commands can be found in the help menu:
 
    ```bash
-     -analogio float
-         analogio offset (mV) (default NaN)
-     -cache float
-         cache offset (mV) (default NaN)
-     -core float
-         core offset (mV) (default NaN)
-     -force
-         allow setting positive offsets
-     -gpu float
-         gpu offset (mV) (default NaN)
-     -lock-power-limit
-         lock the power limit
-     -p1 string
-         P1 Power Limit (W) and Time Window (s), e.g., "35 10"
-     -p2 string
-         P2 Power Limit (W) and Time Window (s), e.g., "35 1"
-     -read
-         read existing values
-     -temp int
-         set temperature target on AC (°C) (default -1)
-     -temp-bat int
-         set temperature target on battery (°C) (default -1)
-     -turbo int
-         set Intel Turbo (1 disabled, 0 enabled) (default -1)
-     -uncore float
-         uncore offset (mV) (default NaN)
-     -verbose
-         print debug info
+    Usage:
+    undervolt-go [flags]
+
+    Flags:
+        --analogio float     analogio offset (mV) (default NaN)
+        --cache float        cache offset (mV) (default NaN)
+        --core float         core offset (mV) (default NaN)
+        --force              allow setting positive offsets
+        --gpu float          gpu offset (mV) (default NaN)
+    -h, --help               help for undervolt-go
+        --lock-power-limit   lock the power limit
+        --p1 strings         P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10
+        --p2 strings         P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5
+        --read               read existing values
+        --temp int           set temperature target on AC (°C) (default -1)
+        --temp-bat int       set temperature target on battery (°C) (default -1)
+        --turbo int          set Intel Turbo (1 disabled, 0 enabled) (default -1)
+        --uncore float       uncore offset (mV) (default NaN)
+        --verbose            print debug info
    ```
 
 ## Features
@@ -161,7 +154,7 @@ To install **undervolt-go** on your system, follow these steps:
 - **Set Temperature Target to 85°C:**
 
   ```bash
-  sudo ./undervolt-go --temp 85
+  sudo ./undervolt-go --temp=85
   ```
 
   This sets the CPU throttling temperature target to 85 degrees Celsius.
@@ -169,7 +162,7 @@ To install **undervolt-go** on your system, follow these steps:
 - **Disable Intel Turbo Boost:**
 
   ```bash
-  sudo ./undervolt-go --turbo 1
+  sudo ./undervolt-go --turbo=1
   ```
 
   This command disables Intel Turbo Boost, potentially reducing heat and power consumption.
