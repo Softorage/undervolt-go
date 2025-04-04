@@ -47,17 +47,17 @@ jobs:
     - name: Make compiled binary available
       run: |
         echo "Working on making the compiled binary available..."
-        mkdir staging public
-        cp -r ./undervolt-go ./staging/ # Copy the binary to the staging directory
-        cp -r ./dist/script/* ./staging/ # Copy the install scripts to the staging directory
+        mkdir latest-build public
+        cp -r ./undervolt-go ./latest-build/ # Copy the binary to the latest-build directory
+        cp -r ./dist/script/* ./latest-build/ # Copy the install scripts to the latest-build directory
         echo "Ready to deploy!"
-    - name: Compress the 'latest-build' under 'staging' directory and make it available in 'public'
+    - name: Compress the 'latest-build' and make it available in 'public'
       run: |
-        zip -r undervolt-go.zip ./staging/ # Make a zip file of the latest build
+        zip -r undervolt-go.zip ./latest-build/ # Make a zip file of the latest build
         cp -r undervolt-go.zip ./public/
         echo "Compress complete and available in public directory!"
-        echo "Removing the now unused staging directory and undervolt-go.zip..."
-        rm -r undervolt-go.zip staging
+        echo "Removing the now unused latest-build directory and undervolt-go.zip..."
+        rm -r undervolt-go.zip latest-build
         echo "Removing complete!"
     - name: Output the files structure into a JSON file
       run: |
