@@ -2,6 +2,8 @@
 
 **undervolt-go** is a Go port of the original [undervolt](https://github.com/georgewhewell/undervolt) utility, designed to allow users to undervolt Intel CPUs on Linux systems. Undervolting can help reduce CPU temperatures, decrease power consumption, and potentially increase system stability and longevity. **undervolt-go** gives the advantage of running the application without the need for any dependencies.
 
+Get it [here](https://softorage.github.io/undervolt-go/).
+
 _**Note:**_
 - *Please use this software with extreme caution. It has the potential to damage your computer if used incorrectly.*
 
@@ -91,15 +93,21 @@ To install **undervolt-go** on your system, follow these steps:
    sudo undervolt-go --p1=40,32
    ```
 
-3. This command applies a 60W power limit to PL2 and a 32s time window. PL2 is the short term power limit, that can be safe for shorter periods and is useful for short bursts of performance.
+3. This command applies a 60W power limit to PL2 and a 10s time window. PL2 is the short term power limit, that can be safe for shorter periods and is useful for short bursts of performance.
    
    ```bash
-   sudo undervolt-go --p2=60,32
+   sudo undervolt-go --p2=60,10
    ```
 
-4. All commands can be found in the help menu:
-
+4. You can use multiple flags in a single command.
+   
    ```bash
+   sudo undervolt-go --core=-70 --cache=-50 --p1=40,32 --p2=60,10 --turbo=0 --temp=78 --temp-bat=66
+   ```
+
+5. All commands can be found in the help menu:
+
+   ```
    Usage:
    undervolt-go [flags]
 
@@ -109,7 +117,7 @@ To install **undervolt-go** on your system, follow these steps:
          --core float         core offset (mV) (default NaN)
          --force              allow setting positive offsets
          --gpu float          gpu offset (mV) (default NaN)
-   -h, --help               help for undervolt-go
+     -h, --help               help for undervolt-go
          --lock-power-limit   lock the power limit
          --p1 strings         P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10
          --p2 strings         P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5
@@ -119,7 +127,7 @@ To install **undervolt-go** on your system, follow these steps:
          --turbo int          set Intel Turbo (1 disabled, 0 enabled) (default -1)
          --uncore float       uncore offset (mV) (default NaN)
          --verbose            print debug info
-   -v, --version            version for undervolt-go
+     -v, --version            version for undervolt-go
    ```
 
 ## Features
@@ -143,7 +151,15 @@ To install **undervolt-go** on your system, follow these steps:
 
 ## Configuration
 
-**undervolt-go** does not use a configuration file. All settings are applied via command-line arguments. To maintain settings across reboots, consider creating a startup script that runs your preferred `undervolt-go` command.
+**undervolt-go** does not use a configuration file. All settings are applied via command-line arguments. To maintain settings across reboots, you can either consider creating a startup script that runs your preferred `undervolt-go` command, or add the preferred `undervolt-go` command in `.profile` file. You may need to edit the `sudoers` file to allow running `undervolt-go` as sudo without requiring password.
+
+To edit `sudoers` file,
+1. Type in terminal `sudo visudo`.
+2. Add the below line at last of the sudoers file to allow running `undervolt-go` as sudo without requiring password
+   `username ALL=(ALL) NOPASSWD: /usr/local/bin/undervolt-go` 
+3. `Ctrl`+`X` to exit, `y` and `enter` to save.
+4. Make sure that you are absolutely sure that the computer won't crash with the commands that you are putting in `.profile`. Otherwise, your computer will always crash upon login. In such a case, you may try to shift to tty4 (`Ctrl`+`Alt`+`F4`) before login (or any other tty), and remove the commands causing issues from `.profile` file. This would usually work if X Server is causing issues.
+
 
 ## Examples
 
@@ -218,6 +234,11 @@ undervolt-go supports a range of Intel CPUs, particularly those from the Haswell
 ## Contributors
 
 We welcome contributions from the community. If you'd like to contribute to **undervolt-go**, please fork the repository and submit a pull request with your changes.
+
+## Credits
+
+* [undervolt](https://github.com/georgewhewell/undervolt) for Intel CPUs on Linux
+* [Softorage](https://softorage.com)
 
 ## License
 
