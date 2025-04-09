@@ -93,7 +93,7 @@ func writeMSR(val uint64, addr uint64) error {
 	for _, cpu := range cpus {
 		path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return fmt.Errorf("msr module not loaded (run modprobe msr)")
+			return fmt.Errorf("MSR module not loaded (run modprobe msr)")
 		}
 		log.Printf("Writing 0x%x to %s", val, path)
 		f, err := os.OpenFile(path, os.O_WRONLY, 0)
@@ -204,7 +204,7 @@ func setTemperature(temp int, msr MSR) error {
 func readOffset(plane string, msr MSR) (float64, error) {
 	planeIndex, ok := planes[plane]
 	if !ok {
-		return 0, fmt.Errorf("unknown plane: %s", plane)
+		return 0, fmt.Errorf("Unknown plane: %s", plane)
 	}
 	valueToWrite := packOffset(planeIndex, nil)
 	if err := writeMSR(valueToWrite, msr.addrVoltageOffsets); err != nil {
@@ -221,10 +221,10 @@ func readOffset(plane string, msr MSR) (float64, error) {
 func setOffset(plane string, mV float64, msr MSR, force bool) error {
 	planeIndex, ok := planes[plane]
 	if !ok {
-		return fmt.Errorf("unknown plane: %s", plane)
+		return fmt.Errorf("Unknown plane: %s", plane)
 	}
 	if mV > 0 && !force {
-		return fmt.Errorf("positive offset requires --force")
+		return fmt.Errorf("Positive offset requires --force")
 	}
 	log.Printf("Setting %s offset to %.2f mV", plane, mV)
 	target := convertOffset(mV)
@@ -239,7 +239,7 @@ func setOffset(plane string, mV float64, msr MSR, force bool) error {
 		return err
 	}
 	if math.Abs(wantMV-readMV) > 0.001 {
-		return fmt.Errorf("failed to apply %s: set %.2f, read %.2f", plane, wantMV, readMV)
+		return fmt.Errorf("Failed to apply %s: set %.2f, read %.2f", plane, wantMV, readMV)
 	}
 	return nil
 }
@@ -307,7 +307,7 @@ func setPowerLimit(pl PowerLimit, msr MSR) error {
 		return err
 	}
 	if oldPl.Locked {
-		return fmt.Errorf("cannot write power limit because it is locked")
+		return fmt.Errorf("Cannot write power limit because it is locked.")
 	}
 	units, err := readMSR(msr.addrUnits, 0)
 	if err != nil {
@@ -331,7 +331,7 @@ func setPowerLimit(pl PowerLimit, msr MSR) error {
 	}
 	stPowerVal := int(stPower * powerUnit)
 	if stPowerVal < 0 || stPowerVal > 0x7fff {
-		return fmt.Errorf("short term power out of range (%d > 0x7fff)", stPowerVal)
+		return fmt.Errorf("Short term power out of range (%d > 0x7fff)", stPowerVal)
 	}
 	writeValue |= uint64(stPowerVal) << 32
 	stTimeVal := fromSeconds(stTime, timeUnit)
@@ -351,7 +351,7 @@ func setPowerLimit(pl PowerLimit, msr MSR) error {
 	}
 	ltPowerVal := int(ltPower * powerUnit)
 	if ltPowerVal < 0 || ltPowerVal > 0x7fff {
-		return fmt.Errorf("long term power out of range (%d > 0x7fff)", ltPowerVal)
+		return fmt.Errorf("Long term power out of range (%d > 0x7fff)", ltPowerVal)
 	}
 	writeValue |= uint64(ltPowerVal)
 	ltTimeVal := fromSeconds(ltTime, timeUnit)
@@ -374,7 +374,7 @@ func setPowerLimit(pl PowerLimit, msr MSR) error {
 		return err
 	}
 	if newVal != writeValue {
-		return fmt.Errorf("failed to apply power limit: tried to set 0x%x, read 0x%x", writeValue, newVal)
+		return fmt.Errorf("Failed to apply power limit: Tried to set 0x%x, read 0x%x", writeValue, newVal)
 	}
 	return nil
 }
@@ -423,8 +423,8 @@ var rootCmd = &cobra.Command{
 
 		// If no flags are provided, show usage.
 		if cmd.Flags().NFlag() == 0 {
-			cmd.Usage()
-			os.Exit(1)
+			runGUI()
+			return
 		}
 
 		// Ensure the MSR module is loaded.
@@ -511,13 +511,13 @@ var rootCmd = &cobra.Command{
 		// For long term (P1)
 		if len(p1Args) > 0 {
 			if len(p1Args) != 2 {
-				fmt.Fprintln(os.Stderr, "p1 requires two arguments: POWER_LIMIT TIME_WINDOW")
+				fmt.Fprintln(os.Stderr, "P1 requires two arguments: POWER_LIMIT TIME_WINDOW")
 				os.Exit(1)
 			}
 			power, err1 := strconv.ParseFloat(p1Args[0], 64)
 			timeWin, err2 := strconv.ParseFloat(p1Args[1], 64)
 			if err1 != nil || err2 != nil {
-				fmt.Fprintln(os.Stderr, "invalid p1 arguments")
+				fmt.Fprintln(os.Stderr, "Invalid P1 arguments")
 				os.Exit(1)
 			}
 			pl.LongTermEnabled = true
@@ -527,13 +527,13 @@ var rootCmd = &cobra.Command{
 		// For short term (P2)
 		if len(p2Args) > 0 {
 			if len(p2Args) != 2 {
-				fmt.Fprintln(os.Stderr, "p2 requires two arguments: POWER_LIMIT TIME_WINDOW")
+				fmt.Fprintln(os.Stderr, "P2 requires two arguments: POWER_LIMIT TIME_WINDOW")
 				os.Exit(1)
 			}
 			power, err1 := strconv.ParseFloat(p2Args[0], 64)
 			timeWin, err2 := strconv.ParseFloat(p2Args[1], 64)
 			if err1 != nil || err2 != nil {
-				fmt.Fprintln(os.Stderr, "invalid p2 arguments")
+				fmt.Fprintln(os.Stderr, "Invalid P2 arguments")
 				os.Exit(1)
 			}
 			pl.ShortTermEnabled = true
@@ -558,7 +558,7 @@ var rootCmd = &cobra.Command{
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			fmt.Printf("temperature target: -%d (%d°C)\n", temp, 100-temp)
+			fmt.Printf("Temperature target: -%d (%d°C)\n", temp, 100-temp)
 			for plane := range planes {
 				voltage, err := readOffset(plane, msr)
 				if err != nil {
@@ -582,7 +582,7 @@ var rootCmd = &cobra.Command{
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Error reading power limits:", err)
 			} else {
-				fmt.Printf("powerlimit: %.2fW (short: %.2fs - %s) / %.2fW (long: %.2fs - %s)%s\n",
+				fmt.Printf("Power limit: %.2fW (short: %.2fs - %s) / %.2fW (long: %.2fs - %s)%s\n",
 					plRead.ShortTermPower,
 					plRead.ShortTermTime,
 					boolToEnabled(plRead.ShortTermEnabled),
@@ -597,24 +597,24 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	// Basic undervolt flags.
-	rootCmd.PersistentFlags().BoolVar(&readFlag, "read", false, "read existing values")
-	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "print debug info")
-	rootCmd.PersistentFlags().BoolVar(&forceFlag, "force", false, "allow setting positive offsets")
-	rootCmd.PersistentFlags().IntVar(&tempFlag, "temp", -1, "set temperature target on AC (°C)")
-	rootCmd.PersistentFlags().IntVar(&tempBatFlag, "temp-bat", -1, "set temperature target on battery (°C)")
-	rootCmd.PersistentFlags().IntVar(&turboFlag, "turbo", -1, "set Intel Turbo (1 disabled, 0 enabled)")
+	rootCmd.PersistentFlags().BoolVar(&readFlag, "read", false, "Read existing values")
+	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Print debug information")
+	rootCmd.PersistentFlags().BoolVar(&forceFlag, "force", false, "Allow setting positive offsets")
+	rootCmd.PersistentFlags().IntVar(&tempFlag, "temp", -1, "Set temperature target on AC (°C)")
+	rootCmd.PersistentFlags().IntVar(&tempBatFlag, "temp-bat", -1, "Set temperature target on battery (°C)")
+	rootCmd.PersistentFlags().IntVar(&turboFlag, "turbo", -1, "Set Intel Turbo (1 disabled, 0 enabled)")
 
 	// Voltage offset flags.
-	rootCmd.PersistentFlags().Float64Var(&coreOffset, "core", math.NaN(), "core offset (mV)")
-	rootCmd.PersistentFlags().Float64Var(&gpuOffset, "gpu", math.NaN(), "gpu offset (mV)")
-	rootCmd.PersistentFlags().Float64Var(&cacheOffset, "cache", math.NaN(), "cache offset (mV)")
-	rootCmd.PersistentFlags().Float64Var(&uncoreOffset, "uncore", math.NaN(), "uncore offset (mV)")
-	rootCmd.PersistentFlags().Float64Var(&analogioOffset, "analogio", math.NaN(), "analogio offset (mV)")
+	rootCmd.PersistentFlags().Float64Var(&coreOffset, "core", math.NaN(), "Core offset (mV)")
+	rootCmd.PersistentFlags().Float64Var(&gpuOffset, "gpu", math.NaN(), "GPU offset (mV)")
+	rootCmd.PersistentFlags().Float64Var(&cacheOffset, "cache", math.NaN(), "Cache offset (mV)")
+	rootCmd.PersistentFlags().Float64Var(&uncoreOffset, "uncore", math.NaN(), "Uncore offset (mV)")
+	rootCmd.PersistentFlags().Float64Var(&analogioOffset, "analogio", math.NaN(), "AnalogIO offset (mV)")
 
 	// Power limit flags as string slices for multi-value support.
 	rootCmd.PersistentFlags().StringSliceVar(&p1Args, "p1", []string{}, "P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10")
 	rootCmd.PersistentFlags().StringSliceVar(&p2Args, "p2", []string{}, "P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5")
-	rootCmd.PersistentFlags().BoolVar(&lockPowerLimit, "lock-power-limit", false, "lock the power limit")
+	rootCmd.PersistentFlags().BoolVar(&lockPowerLimit, "lock-power-limit", false, "Lock the power limit")
 }
 
 func main() {

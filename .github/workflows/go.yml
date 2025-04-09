@@ -41,23 +41,32 @@ jobs:
         echo "All required dependencies are installed"
     - name: Build undervolt-go
       run: |
-        echo "Building undervolt-go..."
-        go build -ldflags="-X 'main.version=$(git describe --tags)'" -o undervolt-go main.go # When building your application, pass the version from git tags using ldflags.
+        echo "Building Undervolt Go..."
+        go build -ldflags="-X 'main.version=$(git describe --tags)'" -o undervolt-go . # When building your application, pass the version from git tags using ldflags.
+        echo "Build complete!"
+    - name: Build Undervolt Go Pro
+      run: |
+        echo "Building Undervolt Go Pro..."
+        go build -tags gui -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go-pro .
         echo "Build complete!"
     - name: Make compiled binary available
       run: |
         echo "Working on making the compiled binary available..."
-        mkdir latest-build public
+        mkdir latest-build latest-pro-build public
         cp -r ./undervolt-go ./latest-build/ # Copy the binary to the latest-build directory
-        cp -r ./dist/script/* ./latest-build/ # Copy the install scripts to the latest-build directory
+        cp -r ./undervolt-go-pro ./latest-pro-build/ # Copy the binary to the latest-pro-build directory
+        cp -r ./dist/script/cli/* ./latest-build/ # Copy the install scripts to the latest-build directory
+        cp -r ./dist/script/gui/* ./latest-pro-build/ # Copy the install scripts to the latest-pro-build directory
         echo "Ready to deploy!"
     - name: Compress the 'latest-build' and make it available in 'public'
       run: |
         zip -r undervolt-go.zip ./latest-build/ # Make a zip file of the latest build
+        zip -r undervolt-go-pro.zip ./latest-pro-build/ # Make a zip file of the latest build
         cp -r undervolt-go.zip ./public/
+        cp -r undervolt-go-pro.zip ./public/
         echo "Compress complete and available in public directory!"
-        echo "Removing the now unused latest-build directory and undervolt-go.zip..."
-        rm -r undervolt-go.zip latest-build
+        echo "Removing the now unused directory and archives..."
+        rm -r undervolt-go.zip undervolt-go-pro.zip latest-build latest-pro-build
         echo "Removing complete!"
     - name: Output the files structure into a JSON file
       run: |
