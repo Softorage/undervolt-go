@@ -38,7 +38,7 @@ jobs:
     - name: Prepare dependencies
       run: |
         sudo apt update
-        sudo apt install build-essential pkg-config libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev xorg-dev
+        sudo apt install build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
         go mod tidy # Ensures all required dependencies are installed
         echo "All required dependencies are installed"
     - name: Build undervolt-go

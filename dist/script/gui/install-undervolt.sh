@@ -22,10 +22,38 @@ WRAPPER_PATH="/usr/bin/undervolt-go-wrapper"
 echo "Creating pkexec wrapper at ${WRAPPER_PATH}..."
 cat <<EOF > "${WRAPPER_PATH}"
 #!/bin/bash
-export DISPLAY=:0
-export XAUTHORITY=/home/\${SUDO_USER}/.Xauthority
+# Determine the user who initiated the pkexec action
+if [ -n "$PKEXEC_UID" ]; then
+    USER=$(id -un "$PKEXEC_UID")
+elif [ -n "$SUDO_USER" ]; then
+    USER="$SUDO_USER"
+else
+    echo "Error: Could not determine the user. PKEXEC_UID and SUDO_USER are unset." >&2
+    exit 1
+fi
+# Check if the user was found
+if [ -z "$USER" ]; then
+  echo "Error: Could not determine the user." >&2
+  exit 1
+fi
+# Get the user's home directory
+USER_HOME=$(eval echo "~${USER}")
+# Set up the display environment
+if [ -z "$DISPLAY" ]; then
+  export DISPLAY=:0  # Fallback to :0 if DISPLAY is not set
+fi
+# Set up Xauthority
+if [ -f "${USER_HOME}/.Xauthority" ]; then
+  export XAUTHORITY="${USER_HOME}/.Xauthority"
+else
+  echo "Warning: .Xauthority file not found for user ${USER}." >&2
+fi
+# Debugging: Log environment variables
+echo "Launching undervolt-go-pro with DISPLAY=$DISPLAY, XAUTHORITY=$XAUTHORITY, USER=$USER" >&2
+# Execute the binary
 exec ${INSTALL_PATH}
 EOF
+
 chmod +x "${WRAPPER_PATH}"
 
 # Install icon (optional: replace with your own icon)
@@ -42,6 +70,8 @@ echo "Creating PolicyKit policy at ${POLKIT_FILE}..."
 cat <<EOF > "${POLKIT_FILE}"
 <?xml version="1.0" encoding="UTF-8"?>
 <policyconfig>
+  <vendor>Softorage</vendor>
+  <vendor_url>https://softorage.com</vendor_url>
   <action id="com.softorage.undervolt-go">
     <description>Run 'Undervolt Go' as root</description>
     <message>Authentication is required to run 'Undervolt Go'</message>
@@ -51,9 +81,15 @@ cat <<EOF > "${POLKIT_FILE}"
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/undervolt-go-wrapper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+    <annotate key="org.freedesktop.policykit.exec.environment">DISPLAY XAUTHORITY</annotate>
   </action>
 </policyconfig>
 EOF
+
+# set file permissions, allowing the owner read and write access, while group and others have only read access
+chmod 644 /usr/share/polkit-1/actions/com.softorage.undervolt-go.policy
 
 # Install desktop file
 DESKTOP_FILE="/usr/share/applications/undervolt-go.desktop"
