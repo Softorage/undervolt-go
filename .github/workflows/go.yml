@@ -49,7 +49,7 @@ jobs:
     - name: Build Undervolt Go Pro
       run: |
         echo "Building Undervolt Go Pro..."
-        go build -tags gui -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go-pro .
+        go build -tags gui -ldflags="-X 'main.version=$(git describe --tags)'" -o undervolt-go-pro .
         echo "Build complete!"
     - name: Make compiled binary available
       run: |

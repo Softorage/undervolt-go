@@ -171,7 +171,7 @@ func runGUI() {
       buf.WriteString("\nError: " + err.Error())
       //if os.Geteuid() != 0 { commenting out to see if notifications work with sudo
         a.SendNotification(&fyne.Notification{
-          Title:   "undervolt-go",
+          Title:   "Undervolt Go",
           Content: "Error occured when applying settings. Please check 'Output' pane for more information.",
         })
       //}
@@ -413,7 +413,7 @@ func runGUI() {
     // without len(collect()) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
     if err := run(collect()...); err == nil && len(collect()) > 0 {
       a.SendNotification(&fyne.Notification{
-        Title:   "undervolt-go",
+        Title:   "Undervolt Go",
         Content: "Settings applied successfully.",
       })
     }
