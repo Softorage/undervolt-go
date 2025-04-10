@@ -15,7 +15,7 @@ import (
   "bytes"
   "fmt"
   "os/exec"
-  //"os"
+  //"os" remove comment if code for allowing notification for non-sudo user is uncommented
   "strconv"
   "net/url"
   "time"
@@ -410,7 +410,8 @@ func runGUI() {
 
   // --- Action Buttons (docked bottom‑right) ---
   applyBtn := widget.NewButton("Apply", func() {
-    if err := run(collect()...); err == nil {
+    // without len(collect()) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
+    if err := run(collect()...); err == nil && len(collect()) > 0 {
       a.SendNotification(&fyne.Notification{
         Title:   "undervolt-go",
         Content: "Settings applied successfully.",

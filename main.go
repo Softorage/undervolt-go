@@ -412,7 +412,7 @@ var rootCmd = &cobra.Command{
 	Use:   rootCmdUseString,
 	Version: version,
 	Short: "A tool for undervolting and power limit adjustments to reduce temperatures and extend lifespan",
-	Long:  "A no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, monitor temperatures and fan speeds, and more. It also features a user-friendly graphical version. Please use with extreme caution. It has the potential to damage your computer if used incorrectly.",
+	Long:  "A no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, and more. It also features a user-friendly graphical version which lets you monitor temperatures and fan speeds with the help of 'sensors' package.\n\nPlease use with extreme caution. It has the potential to damage your computer if used incorrectly.",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Setup logging.
 		if verboseFlag {
@@ -559,13 +559,14 @@ var rootCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			fmt.Printf("Temperature target: -%d (%d°C)\n", temp, 100-temp)
+			fmt.Printf("Voltage Offsets:\n")
 			for plane := range planes {
 				voltage, err := readOffset(plane, msr)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error reading %s offset: %v\n", plane, err)
 					continue
 				}
-				fmt.Printf("%s: %.2f mV\n", plane, voltage)
+				fmt.Printf("   %s: %.2f mV\n", plane, voltage)
 			}
 			// Read turbo state.
 			path := "/sys/devices/system/cpu/intel_pstate/no_turbo"
@@ -575,14 +576,14 @@ var rootCmd = &cobra.Command{
 				if string(data) == "1\n" {
 					state = "disable"
 				}
-				fmt.Printf("turbo: %s\n", state)
+				fmt.Printf("Intel Turbo: %s\n", state)
 			}
 			// Read and print power limits.
 			plRead, err := readPowerLimit(msr)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Error reading power limits:", err)
 			} else {
-				fmt.Printf("Power limit: %.2fW (short: %.2fs - %s) / %.2fW (long: %.2fs - %s)%s\n",
+				fmt.Printf("Power limit:\n   %.2fW [P2 (short): %.2fs - %s]\n   %.2fW [P1 (long): %.2fs - %s]%s\n",
 					plRead.ShortTermPower,
 					plRead.ShortTermTime,
 					boolToEnabled(plRead.ShortTermEnabled),

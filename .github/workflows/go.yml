@@ -81,6 +81,7 @@ jobs:
     - name: Make web pages available
       run: |
         cp -r ./dist/pages/* ./public/ # Copy the web pages to the public directory
+        echo "All done!"
     - name: Upload artifact
       # upload artifact in the build stage, so that it is later on accessible in the deploy stage
       uses: actions/upload-pages-artifact@v3
