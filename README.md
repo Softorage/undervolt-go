@@ -14,6 +14,7 @@ _**Note:**_
 - [Building](#building)
 - [Usage](#usage)
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Dependencies](#dependencies)
 - [Configuration](#configuration)
 - [Examples](#examples)
@@ -67,16 +68,17 @@ To install **Undervolt Go** on your system, follow these steps:
    - You can download the Graphical Interface version (Pro version) or the CLI version.
    - The GUI version can also run the CLI commands. The commands need to be passed to `undervolt-go-pro`
 2. Extract the archive. You should now have the following files:
-   1. undervolt-go or undervolt-go-pro
-   2. install-undervolt.sh
-   3. uninstall-undervolt.sh
-   4. update-undervolt.sh
-   5. icon.png (in case of Pro version)
-3. Simply make install-undervolt.sh executable (or update-undervolt.sh if you already have Undervolt Go installed on your system):
+   1. `undervolt-go` or `undervolt-go-pro`
+   2. `install-undervolt.sh`
+   3. `uninstall-undervolt.sh`
+   4. `update-undervolt.sh`
+   5. `icon.png` (in case of Pro version)
+3. Open Terminal and navigate to the directory containing the undervolt-go or undervolt-go-pro executable. You can often simply launch Terminal in the active folder with a right-click.
+4. Simply make `install-undervolt.sh` executable (or `update-undervolt.sh` if you already have Undervolt Go installed on your system):
    - `chmod +x install-undervolt.sh`
-   - or you can right click install-undervolt.sh, go to Properties, and in the Permissions tab, tick 'Make executable'
-4. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
-5. Run install-undervolt.sh (or update-undervolt.sh) with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
+   - or you can right click `install-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
+5. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
+6. Run `install-undervolt.sh` (or `update-undervolt.sh`) with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
    `sudo ./install-undervolt.sh`
 
 ## Usage
@@ -143,6 +145,19 @@ To install **Undervolt Go** on your system, follow these steps:
 - **Intel Turbo Adjustment:** Enable or disable Intel Turbo for optimal performance.
 - **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
 - **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
+
+## Screenshots
+| Description | Screenshot |
+| --- | --- |
+| Voltage Offsets | ![Voltage Offsets](/dist/images/screenshots/v0.5.4/VoltOffset-UndervoltGo.png) |
+| Power Limit | ![Power Limit](/dist/images/screenshots/v0.5.4/PowerLimit-UndervoltGo.png) |
+| Temperature Limit | ![Temperature Limit](/dist/images/screenshots/v0.5.4/TempLimit-UndervoltGo.png) |
+| Other Flags | ![Other Flags](/dist/images/screenshots/v0.5.4/OtherFlags-UndervoltGo.png) |
+| Output | ![Output](/dist/images/screenshots/v0.5.4/Output-UndervoltGo.png) |
+| Check Core Temps | ![Check Core Temps](/dist/images/screenshots/v0.5.4/CheckTemp-UndervoltGo.png) |
+| Check Fan RPMs | ![Check Fan RPMs](/dist/images/screenshots/v0.5.4/CheckFans-UndervoltGo.png) |
+| Read | ![Read](/dist/images/screenshots/v0.5.4/Read-UndervoltGo.png) |
+| Version | ![Version](/dist/images/screenshots/v0.5.4/Ver-UndervoltGo.png) |
 
 ## Dependencies
 
@@ -225,9 +240,9 @@ To edit `sudoers` file,
 
       Mehtod 2: With installation:
 
-      - Navigate to the undervolt-go or undervolt-go-pro directory: Change to the directory containing the undervolt-go executable or undervolt-go-pro executable for graphical version, along with the install-undervolt.sh, uninstall-undervolt.sh and update-undervolt.sh scripts. Make sure that all the files are in the same directory.
+      - Navigate to the undervolt-go or undervolt-go-pro directory: Change to the directory containing the undervolt-go executable or undervolt-go-pro executable for graphical version, along with the `install-undervolt.sh`, `uninstall-undervolt.sh` and `update-undervolt.sh` scripts. Make sure that all the files are in the same directory.
       - Open Terminal: Launch your terminal application in the undervolt-go or undervolt-go-pro directory.
-      - Install Undervolt Go: Run the install-undervolt.sh script: 
+      - Install Undervolt Go: Run the `install-undervolt.sh` script: 
          `sudo ./install-undervolt.sh`
       - Run Undervolt Go:
          - For `undervolt-go`, you can now use 'Undervolt Go' from any directory. Run the `undervolt-go` command with root privileges:
