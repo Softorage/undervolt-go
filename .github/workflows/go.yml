@@ -37,8 +37,8 @@ jobs:
       uses: actions/configure-pages@v5
     - name: Prepare dependencies
       run: |
-        sudo apt update
-        sudo apt install build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
+        sudo apt-get update
+        sudo apt-get install build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
         go mod tidy # Ensures all required dependencies are installed
         echo "All required dependencies are installed"
     - name: Build undervolt-go
@@ -73,8 +73,8 @@ jobs:
     - name: Output the files structure into a JSON file
       run: |
         # GitHub Actions' ubuntu-latest comes preinstalled with tree. So no need to install tree.
-        #sudo apt update
-        #sudo apt install -y tree
+        #sudo apt-get update
+        #sudo apt-get install -y tree
         tree -J public > files.json
         cp -r files.json ./public/
         echo "JSON Manifest generated with the directory structure!"

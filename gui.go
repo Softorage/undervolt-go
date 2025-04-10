@@ -30,7 +30,7 @@ import (
 )
 
 // Used in main.go by rootCmd
-const rootCmdUseString := "undervolt-go-pro"
+const rootCmdUseString = "undervolt-go-pro"
 
 func runGUI() {
   a := app.NewWithID("com.softorage.undervolt-go")
