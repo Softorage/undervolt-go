@@ -29,6 +29,9 @@ import (
   "fyne.io/fyne/v2/data/binding"
 )
 
+// Used in main.go by rootCmd
+const rootCmdUseString := "undervolt-go-pro"
+
 func runGUI() {
   a := app.NewWithID("com.softorage.undervolt-go")
   // Set dark theme
@@ -154,10 +157,9 @@ func runGUI() {
     return args
   }
 
-  
-
+  //
   run := func(flags ...string) error {
-    cmd := exec.Command("sudo", append([]string{"undervolt-go"}, flags...)...)
+    cmd := exec.Command("sudo", append([]string{"undervolt-go-pro"}, flags...)...)
     // Redirect command output to a buffer for display in the Output Pane.
     // Redirect both stdout and stderr to the same buffer, so that any error
     // messages are included in the output.
@@ -167,12 +169,12 @@ func runGUI() {
     err := cmd.Run()
     if err != nil {
       buf.WriteString("\nError: " + err.Error())
-      if os.Geteuid() != 0 {
+      //if os.Geteuid() != 0 { commenting out to see if notifications work with sudo
         a.SendNotification(&fyne.Notification{
           Title:   "undervolt-go",
           Content: "Error occured when applying settings. Please check 'Output' pane for more information.",
         })
-      }
+      //}
     }
     outputLabelBinding.Set(buf.String())
     return err
@@ -327,7 +329,7 @@ func runGUI() {
       return
     }
     stopMonitorFunc()
-    outputWarningBind.Set("Monitoring stopped.")
+    outputWarningBind.Set("Monitoring stopped. You may now run other commands.")
     clearLabelAfter(outputWarningBind, 3*time.Second)
   })
   verBtn := widget.NewButton("Version", func() {

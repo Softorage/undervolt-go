@@ -24,12 +24,12 @@ cat <<EOF > "${WRAPPER_PATH}"
 #!/bin/bash
 # Determine the user who initiated the pkexec action
 if [ -n "$PKEXEC_UID" ]; then
-    USER=$(id -un "$PKEXEC_UID")
+  USER=$(id -un "$PKEXEC_UID")
 elif [ -n "$SUDO_USER" ]; then
-    USER="$SUDO_USER"
+  USER="$SUDO_USER"
 else
-    echo "Error: Could not determine the user. PKEXEC_UID and SUDO_USER are unset." >&2
-    exit 1
+  echo "Error: Could not determine the user. PKEXEC_UID and SUDO_USER are unset." >&2
+  exit 1
 fi
 # Check if the user was found
 if [ -z "$USER" ]; then

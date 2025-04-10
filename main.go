@@ -409,10 +409,10 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "undervolt-go",
+	Use:   rootCmdUseString,
 	Version: version,
-	Short: "A tool for undervolting and power limit adjustments",
-	Long:  "A Go port of undervolt.py (v0.4.0) including power limit adjustments using the cobra library for improved flag handling.",
+	Short: "A tool for undervolting and power limit adjustments to reduce temperatures and extend lifespan",
+	Long:  "A no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, monitor temperatures and fan speeds, and more. It also features a user-friendly graphical version. Please use with extreme caution. It has the potential to damage your computer if used incorrectly.",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Setup logging.
 		if verboseFlag {

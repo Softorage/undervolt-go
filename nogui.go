@@ -12,6 +12,9 @@ package main
 
 import "fmt"
 
+// Used in main.go by rootCmd
+const rootCmdUseString := "undervolt-go"
+
 func runGUI() {
     fmt.Println("Run 'undervolt-go --help' for information about CLI flags. To get the GUI, get the GUI binary from https://softorage.github.io/undervolt-go/")
 }
