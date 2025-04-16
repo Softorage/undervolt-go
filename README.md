@@ -114,26 +114,53 @@ To install **Undervolt Go** on your system, follow these steps:
 5. All commands can be found in the help menu:
 
    ```
-   Usage:
-   undervolt-go [flags]
+   sudo undervolt-go --help
 
-   Flags:
-         --analogio float     analogio offset (mV) (default NaN)
-         --cache float        cache offset (mV) (default NaN)
-         --core float         core offset (mV) (default NaN)
-         --force              allow setting positive offsets
-         --gpu float          gpu offset (mV) (default NaN)
-     -h, --help               help for undervolt-go
-         --lock-power-limit   lock the power limit
-         --p1 strings         P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10
-         --p2 strings         P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5
-         --read               read existing values
-         --temp int           set temperature target on AC (°C) (default -1)
-         --temp-bat int       set temperature target on battery (°C) (default -1)
-         --turbo int          set Intel Turbo (1 disabled, 0 enabled) (default -1)
-         --uncore float       uncore offset (mV) (default NaN)
-         --verbose            print debug info
-     -v, --version            version for undervolt-go
+    Undervolt Go
+
+    A no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, and more. It also features a user-friendly graphical version which lets you monitor temperatures and fan speeds with the help of 'sensors' package.
+
+    Please use with extreme caution. It has the potential to damage your computer if used incorrectly.
+
+    Usage:
+      `undervolt-go [flags]`
+      `undervolt-go [command]`
+
+    Available Commands:
+      completion  Generate the autocompletion script for the specified shell
+      help        Help about any command
+      profile     Manage saved profiles
+        Usage:
+          `undervolt-go profile [command]`
+
+        Available Sub-commands:
+          apply       Apply given profile
+            Usage:
+              `undervolt-go profile apply [auto|ac|battery] [flags]`
+          list        List available profiles
+          save        Save current flags as a profile
+            Usage:
+              `undervolt-go profile save [ac|battery] [flags]`
+
+    Flags:
+          --analogio float     AnalogIO offset (mV) (default NaN)
+          --cache float        Cache offset (mV) (default NaN)
+          --core float         Core offset (mV) (default NaN)
+          --force              Allow setting positive offsets
+          --gpu float          GPU offset (mV) (default NaN)
+      -h, --help               help for undervolt-go
+          --lock-power-limit   Lock the power limit
+          --p1 strings         P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10
+          --p2 strings         P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5
+          --read               Read existing values
+          --temp int           Set temperature target on AC (°C) (default -1)
+          --temp-bat int       Set temperature target on battery (°C) (default -1)
+          --turbo int          Set Intel Turbo (1 disabled, 0 enabled) (default -1)
+          --uncore float       Uncore offset (mV) (default NaN)
+          --verbose            Print debug information
+      -v, --version            version for undervolt-go
+
+    Use "undervolt-go [command] --help" for more information about a command.
    ```
 
 ## Features
@@ -143,6 +170,8 @@ To install **Undervolt Go** on your system, follow these steps:
 - **Temperature Target Override:** Set a custom temperature target for CPU throttling, on AC or battery power.
 - **Power Limit Configuration:** Adjust the CPU's power limits to control performance and power consumption.
 - **Intel Turbo Adjustment:** Enable or disable Intel Turbo for optimal performance.
+- **Profile Management:** Save and apply profiles for quick configuration changes.
+- **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power. (Coming soon)
 - **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
 - **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
 
@@ -174,7 +203,9 @@ To install **Undervolt Go** on your system, follow these steps:
 
 ## Configuration
 
-**Undervolt Go** does not use a configuration file. All settings are applied via command-line arguments. To maintain settings across reboots, you can either consider creating a startup script that runs your preferred `undervolt-go` command, or add the preferred `undervolt-go` command in `.profile` file. You may need to edit the `sudoers` file to allow running `undervolt-go` as sudo without requiring password.
+You can save configuration using the `profile save [ac/battery] --flags` command. Saved profiles are automatically applied based on AC or battery power.
+
+To maintain settings across reboots, you can either consider creating a startup script that runs your preferred `undervolt-go` command, or add the preferred `undervolt-go` command in `.profile` file. You may need to edit the `sudoers` file to allow running `undervolt-go` as sudo without requiring password.
 
 To edit `sudoers` file,
 1. Type in terminal `sudo visudo`.
