@@ -944,7 +944,7 @@ const autoUdevRule = "/etc/udev/rules.d/99-undervolt-go-auto.rules"
 const autoServicePath = "/etc/systemd/system/undervolt-go-auto.service"
 
 var profileAutoCmd = &cobra.Command{
-	Use:   "auto-switch[enable|disable]",
+	Use:   "auto-switch [enable|disable]",
 	Short: "Enable or disable automatic profile switching on AC/Battery events",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
