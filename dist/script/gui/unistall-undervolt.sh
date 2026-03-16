@@ -19,6 +19,17 @@ ICON_PATH="/usr/share/icons/undervolt-go.png"
 POLKIT_FILE="/usr/share/polkit-1/actions/com.softorage.undervolt-go.policy"
 DESKTOP_FILE="/usr/share/applications/undervolt-go.desktop"
 
+# Paths created by the Go program
+PERSIST_SERVICE="/etc/systemd/system/undervolt-go.service"
+AUTO_SERVICE="/etc/systemd/system/undervolt-go-auto.service"
+AUTO_UDEV="/etc/udev/rules.d/99-undervolt-go-auto.rules"
+CONFIG_DIR="/etc/undervolt-go"
+
+# Stop and disable systemd services if they are running
+echo "Stopping and disabling systemd services created by undervolt-go..."
+systemctl stop undervolt-go.service undervolt-go-auto.service 2>/dev/null || true
+systemctl disable undervolt-go.service undervolt-go-auto.service 2>/dev/null || true
+
 # Remove binary
 if [[ -f "${INSTALL_PATH}" ]]; then
   echo "Removing binary at ${INSTALL_PATH}..."
@@ -48,6 +59,36 @@ if [[ -f "${DESKTOP_FILE}" ]]; then
   echo "Removing desktop entry at ${DESKTOP_FILE}..."
   rm -f "${DESKTOP_FILE}"
 fi
+
+# Remove persistence systemd service
+if [[ -f "${PERSIST_SERVICE}" ]]; then
+  echo "Removing persistence service at ${PERSIST_SERVICE}..."
+  rm -f "${PERSIST_SERVICE}"
+fi
+
+# Remove auto-switch systemd service
+if [[ -f "${AUTO_SERVICE}" ]]; then
+  echo "Removing auto-switch service at ${AUTO_SERVICE}..."
+  rm -f "${AUTO_SERVICE}"
+fi
+
+# Remove auto-switch udev rule
+if [[ -f "${AUTO_UDEV}" ]]; then
+  echo "Removing udev rule at ${AUTO_UDEV}..."
+  rm -f "${AUTO_UDEV}"
+fi
+
+# Remove configuration directory and config.yaml
+if [[ -d "${CONFIG_DIR}" ]]; then
+  echo "Removing configuration directory at ${CONFIG_DIR}..."
+  rm -rf "${CONFIG_DIR}"
+fi
+
+# Reload systemd and udev daemons to reflect changes
+echo "Reloading systemd and udev..."
+systemctl daemon-reload
+systemctl reset-failed
+udevadm control --reload-rules
 
 # Remove desktop shortcut from user's Desktop
 USER_DESKTOP="${SUDO_USER:-$USER}"
