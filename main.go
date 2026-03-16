@@ -12,7 +12,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	//"os/user"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -64,7 +64,6 @@ type PowerLimit struct {
 }
 
 // isBatteryDischarging returns true if *any* battery in /sys/class/power_supply is discharging.
-// isBatteryDischarging is a there just in case we need to use it in the future. We are rather create udev rules for battery charging status in the install script.
 func isBatteryDischarging() bool {
 	base := "/sys/class/power_supply"
 	entries, err := os.ReadDir(base)
@@ -419,8 +418,8 @@ func boolToEnabled(b bool) string {
 
 // ---------- Systemd Persistence Functions ----------
 
-const serviceName = "undervolt-go.service"
-const servicePath = "/etc/systemd/system/" + serviceName
+const persistConfigServiceName = "undervolt-go.service"
+const persistConfigServicePath = "/etc/systemd/system/" + persistConfigServiceName
 
 func runSystemctlCmd(name string, args ...string) {
 	cmd := exec.Command(name, args...)
@@ -470,13 +469,13 @@ func enablePersistence() error {
 	WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 	`, execStart)
 
-	fmt.Printf("\nCreating systemd service at %s...\n", servicePath)
-	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+	fmt.Printf("\nCreating systemd service at %s...\n", persistConfigServicePath)
+	if err := os.WriteFile(persistConfigServicePath, []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("failed to write service file: %v", err)
 	}
 
 	runSystemctlCmd("systemctl", "daemon-reload")
-	runSystemctlCmd("systemctl", "enable", serviceName)
+	runSystemctlCmd("systemctl", "enable", persistConfigServiceName)
 
 	fmt.Println("Persistence enabled successfully. Settings will automatically apply on boot and wake.")
 	return nil
@@ -485,12 +484,12 @@ func enablePersistence() error {
 // disablePersistence removes the systemd service entirely
 func disablePersistence() error {
 	assertRoot()
-	fmt.Printf("Removing systemd service %s...\n", servicePath)
+	fmt.Printf("Removing systemd service %s...\n", persistConfigServicePath)
 
-	runSystemctlCmd("systemctl", "stop", serviceName)
-	runSystemctlCmd("systemctl", "disable", serviceName)
+	runSystemctlCmd("systemctl", "stop", persistConfigServiceName)
+	runSystemctlCmd("systemctl", "disable", persistConfigServiceName)
 
-	if err := os.Remove(servicePath); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(persistConfigServicePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove service file: %v", err)
 	}
 
@@ -706,9 +705,9 @@ func applyFlags() error {
 
 		// Check persistence status
 		fmt.Printf("\nBoot/Resume Persistence Status:\n")
-		if _, err := os.Stat(servicePath); err == nil {
+		if _, err := os.Stat(persistConfigServicePath); err == nil {
 			fmt.Println("   Status: ENABLED (systemd service active)")
-			content, err := os.ReadFile(servicePath)
+			content, err := os.ReadFile(persistConfigServicePath)
 			if err == nil {
 				for _, line := range strings.Split(string(content), "\n") {
 					if strings.HasPrefix(line, "ExecStart=") {
@@ -795,26 +794,83 @@ func init() {
 	profileCmd.AddCommand(profileSaveCmd, profileListCmd, profileApplyCmd, profileAutoCmd)
 }
 
-// configDir returns the correct ~/.config/undervolt-go for
-// either the real user (if invoked via sudo) or the current user.
-func configDir() string {
+/* keep temporary : migration of configs to new location */
+// we are changing the config dir to /etc/undervolt-go for uninterrupted systemd service runs
+const newConfigDir = "/etc/undervolt-go"
+const configFileName = "config.yaml"
+
+// 1. Keep the old logic just to locate the legacy configuration
+func oldConfigDir() string {
 	// 1) If sudo was used, SUDO_USER tells us who really invoked us
-	/*
-		if su := os.Getenv("SUDO_USER"); su != "" {
-			if u, err := user.Lookup(su); err == nil {
-				return filepath.Join(u.HomeDir, ".config", "undervolt-go")
-			}
+	if su := os.Getenv("SUDO_USER"); su != "" {
+		if u, err := user.Lookup(su); err == nil {
+			return filepath.Join(u.HomeDir, ".config", "undervolt-go")
 		}
-		// 2) Otherwise, use the normal user config directory
-		if dir, err := os.UserConfigDir(); err == nil {
-			return filepath.Join(dir, "undervolt-go")
-		}
-	*/
-	// 3) Fallback to HOME. NOPE. ALWAYS USE HOME.
+	}
+	// 2) Otherwise, use the normal user config directory
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "undervolt-go")
+	}
+	// 3) Fallback to HOME.
 	return filepath.Join(os.Getenv("HOME"), ".config", "undervolt-go")
 }
 
-// initConfig loads ~/.config/undervolt-go/config.yaml (if present)
+// 2. The Migration Function
+func migrateConfigIfNeeded() error {
+	oldPath := filepath.Join(oldConfigDir(), configFileName)
+	newPath := filepath.Join(newConfigDir, configFileName)
+
+	// Step A: Check if the old config exists. If it doesn't, nothing to migrate.
+	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	// Step B: Check if the new config ALREADY exists.
+	// If it does, we shouldn't overwrite it. We can just delete the old one or leave it alone.
+	if _, err := os.Stat(newPath); err == nil {
+		return nil // Already migrated
+	}
+
+	// Step C: Ensure we have root privileges to write to /etc/
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("a legacy configuration was found at %s. Please run this command with 'sudo' once to migrate it to /etc/", oldPath)
+	}
+
+	log.Printf("Migrating configuration from %s to %s...", oldPath, newPath)
+
+	// Step D: Create /etc/undervolt-go/
+	if err := os.MkdirAll(newConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create /etc/ directory: %w", err)
+	}
+
+	// Step E: Copy the file (Prevents 'invalid cross-device link' errors)
+	configData, err := os.ReadFile(oldPath)
+	if err != nil {
+		return fmt.Errorf("failed to read old config: %w", err)
+	}
+
+	if err := os.WriteFile(newPath, configData, 0644); err != nil {
+		return fmt.Errorf("failed to write new config: %w", err)
+	}
+
+	// Step F: Clean up the old configuration so we don't migrate again
+	if err := os.Remove(oldPath); err != nil {
+		log.Printf("Warning: Migrated config to /etc/, but failed to delete old config: %v", err)
+	}
+	
+	// Attempt to remove the old directory if it's empty
+	_ = os.Remove(oldConfigDir())
+
+	log.Println("Migration successful!")
+	return nil
+}
+
+// 3. Your new simplified configDir function
+func configDir() string {
+	return newConfigDir
+}
+
+// initConfig loads /etc/undervolt-go/config.yaml (if present)
 func initConfig() {
 	cfg := filepath.Join(configDir(), "config.yaml")
 	viper.SetConfigFile(cfg)
@@ -955,7 +1011,7 @@ var profileAutoCmd = &cobra.Command{
 			exePath, _ = filepath.EvalSymlinks(exePath)
 
 			// Capture the current HOME so systemd knows where to find the config.yaml
-			homeDir := os.Getenv("HOME")
+			//homeDir := os.Getenv("HOME")
 
 			serviceContent := fmt.Sprintf(`[Unit]
 Description=Apply Undervolt Go Auto Profile
@@ -963,9 +1019,8 @@ After=multi-user.target
 
 [Service]
 Type=oneshot
-Environment="HOME=%s"
 ExecStart=%s profile apply auto
-`, homeDir, exePath)
+`, exePath)
 
 			if err := os.WriteFile(autoServicePath, []byte(serviceContent), 0644); err != nil {
 				fmt.Fprintln(os.Stderr, "Failed to create service:", err)
@@ -998,6 +1053,11 @@ ExecStart=%s profile apply auto
 }
 
 func main() {
+	// Run migration as early as possible in the initialization
+	if err := migrateConfigIfNeeded(); err != nil {
+		log.Fatalf("Migration failed: %v", err)
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

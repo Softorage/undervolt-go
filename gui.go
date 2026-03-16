@@ -331,7 +331,7 @@ func runGUI() {
 		tempFlag := p.GetInt("tl.temp")
 		tempBatFlag := p.GetInt("tl.temp-bat")
 		turboFlag := p.GetInt("turbo")
-
+		// we can use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
 		p1Args := p.GetIntSlice("pl.p1")
 		p2Args := p.GetIntSlice("pl.p2")
 		/* below code is useful if the values of p1 or p2 array float ... keep it
