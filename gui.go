@@ -16,9 +16,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os" // required for os.Stat ... may also be required if code for allowing notification for non-sudo user is uncommented
 	"os/exec"
 
-	//"os" remove comment and import os if code for allowing notification for non-sudo user is uncommented
 	"net/url"
 	"strconv"
 	"strings"
@@ -284,8 +284,6 @@ func runGUI() {
 			return
 		}
 		args := collect()
-		fmt.Println(args)
-		fmt.Println(name)
 		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
 		if len(args) > 0 {
 			if err := run(flags...); err == nil {
@@ -336,7 +334,6 @@ func runGUI() {
 
 		p1Args := p.GetIntSlice("pl.p1")
 		p2Args := p.GetIntSlice("pl.p2")
-		fmt.Println(p1Args, p2Args)
 		/* below code is useful if the values of p1 or p2 array float ... keep it
 		   if raw := p.Get("pl.p1"); raw != nil {
 		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
@@ -400,6 +397,50 @@ func runGUI() {
 		clearLabelAfter(outputWarningBind, 3*time.Second)
 	})
 
+	// Helper to check if the auto-switch udev rule exists
+	isAutoSwitchEnabled := func() bool {
+		_, err := os.Stat("/etc/udev/rules.d/99-undervolt-go-auto.rules")
+		return err == nil
+	}
+
+	autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
+	autoSwitchLabel.Wrapping = fyne.TextWrapWord
+
+	autoSwitchBtn := widget.NewButton("", nil)
+	updateAutoSwitchBtn := func() {
+		if isAutoSwitchEnabled() {
+			autoSwitchBtn.SetText("Click to disable")
+		} else {
+			autoSwitchBtn.SetText("Click to enable")
+		}
+	}
+	updateAutoSwitchBtn() // Set initial text
+
+	autoSwitchBtn.OnTapped = func() {
+		initConfig() // Make sure we have the latest config state
+
+		if !isAutoSwitchEnabled() {
+			// Check if profiles exist before allowing it to be enabled
+			if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
+				outputWarningBind.Set("Both 'ac' and 'battery' profiles must exist before enabling auto-profile switching.")
+				clearLabelAfter(outputWarningBind, 4*time.Second)
+				return
+			}
+
+			// Execute backend command
+			if err := run("profile", "auto-switch", "enable"); err == nil {
+				outputWarningBind.Set("Auto profile switching enabled.")
+				clearLabelAfter(outputWarningBind, 3*time.Second)
+			}
+		} else {
+			if err := run("profile", "auto-switch", "disable"); err == nil {
+				outputWarningBind.Set("Auto profile switching disabled.")
+				clearLabelAfter(outputWarningBind, 3*time.Second)
+			}
+		}
+		updateAutoSwitchBtn() // Update text after clicking
+	}
+
 	profilesSection := container.NewVBox(
 		sectionHeader["Profiles"],
 		widget.NewLabel("Save current settings to a profile:"),
@@ -409,6 +450,10 @@ func runGUI() {
 		widget.NewLabel("Load settings from a profile:"),
 		profileLoadSelect,
 		profileLoadBtn,
+		widget.NewLabel(""),
+		widget.NewSeparator(),
+		autoSwitchLabel,
+		autoSwitchBtn,
 	)
 	secContainers["Profiles"] = container.NewVScroll(profilesSection)
 

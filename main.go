@@ -504,17 +504,17 @@ func disablePersistence() error {
 // ---------- Cobra Command Setup ----------
 
 var (
-	readFlag           bool
-	verboseFlag        bool
-	forceFlag          bool
-	tempFlag           int
-	tempBatFlag        int
-	turboFlag          int
-	coreOffset         float64
-	gpuOffset          float64
-	cacheOffset        float64
-	uncoreOffset       float64
-	analogioOffset     float64
+	readFlag       bool
+	verboseFlag    bool
+	forceFlag      bool
+	tempFlag       int
+	tempBatFlag    int
+	turboFlag      int
+	coreOffset     float64
+	gpuOffset      float64
+	cacheOffset    float64
+	uncoreOffset   float64
+	analogioOffset float64
 	// Use string slices for multi-argument power limit flags.
 	p1Args             []string
 	p2Args             []string
@@ -792,7 +792,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&disablePersistFlag, "disable-persist", false, "Remove the persistence systemd service completely")
 
 	rootCmd.AddCommand(profileCmd)
-	profileCmd.AddCommand(profileSaveCmd, profileListCmd, profileApplyCmd)
+	profileCmd.AddCommand(profileSaveCmd, profileListCmd, profileApplyCmd, profileAutoCmd)
 }
 
 // configDir returns the correct ~/.config/undervolt-go for
@@ -934,6 +934,64 @@ var profileApplyCmd = &cobra.Command{
 		// Apply the settings
 		if err := applyFlags(); err != nil {
 			fmt.Printf("Failed to apply settings: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
+// profile auto-switch based on battery state. creates the systemd service and udev rule, requiring root privileges.
+const autoUdevRule = "/etc/udev/rules.d/99-undervolt-go-auto.rules"
+const autoServicePath = "/etc/systemd/system/undervolt-go-auto.service"
+
+var profileAutoCmd = &cobra.Command{
+	Use:   "auto-switch[enable|disable]",
+	Short: "Enable or disable automatic profile switching on AC/Battery events",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		action := args[0]
+		if action == "enable" {
+			assertRoot()
+			exePath, _ := os.Executable()
+			exePath, _ = filepath.EvalSymlinks(exePath)
+
+			// Capture the current HOME so systemd knows where to find the config.yaml
+			homeDir := os.Getenv("HOME")
+
+			serviceContent := fmt.Sprintf(`[Unit]
+Description=Apply Undervolt Go Auto Profile
+After=multi-user.target
+
+[Service]
+Type=oneshot
+Environment="HOME=%s"
+ExecStart=%s profile apply auto
+`, homeDir, exePath)
+
+			if err := os.WriteFile(autoServicePath, []byte(serviceContent), 0644); err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to create service:", err)
+				os.Exit(1)
+			}
+
+			// systemctl --no-block is important so udev doesn't hang waiting for the command
+			ruleContent := `SUBSYSTEM=="power_supply", ACTION=="change", RUN+="/bin/systemctl --no-block start undervolt-go-auto.service"` + "\n"
+			if err := os.WriteFile(autoUdevRule, []byte(ruleContent), 0644); err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to create udev rule:", err)
+				os.Exit(1)
+			}
+
+			exec.Command("systemctl", "daemon-reload").Run()
+			exec.Command("udevadm", "control", "--reload-rules").Run()
+			fmt.Println("Auto-switch enabled.")
+
+		} else if action == "disable" {
+			assertRoot()
+			os.Remove(autoServicePath)
+			os.Remove(autoUdevRule)
+			exec.Command("systemctl", "daemon-reload").Run()
+			exec.Command("udevadm", "control", "--reload-rules").Run()
+			fmt.Println("Auto-switch disabled.")
+		} else {
+			fmt.Println("Invalid argument. Use 'enable' or 'disable'.")
 			os.Exit(1)
 		}
 	},
