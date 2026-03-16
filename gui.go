@@ -5,7 +5,7 @@
 /*
 Build GUI version
 
-go build -tags gui -o undervolt-go-gui
+go build -tags gui -o undervolt-go-pro
 go build -tags gui -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go-pro
 
 This will include gui.go, and runGUI() will launch your Fyne GUI.
@@ -223,7 +223,7 @@ func runGUI() {
 	}
 
 	// --- Sections & Their Scrollable Content ---
-	secNames :=[]string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
+	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
 	sectionHeader := make(map[string]*widget.Label)
 	// Create section headers
 	for _, s := range secNames {
@@ -313,6 +313,9 @@ func runGUI() {
 			}
 		}
 
+		// Reload config from disk to catch updated profiles
+		initConfig()
+
 		key := "profiles." + strings.ToLower(actualName)
 		if !viper.IsSet(key) {
 			outputWarningBind.Set(fmt.Sprintf("Profile '%s' not found.", actualName))
@@ -334,7 +337,7 @@ func runGUI() {
 		p1Args := p.GetIntSlice("pl.p1")
 		p2Args := p.GetIntSlice("pl.p2")
 		fmt.Println(p1Args, p2Args)
-		/* below code is useful if the values of p1 or p2 array float
+		/* below code is useful if the values of p1 or p2 array float ... keep it
 		   if raw := p.Get("pl.p1"); raw != nil {
 		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
 		       p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
@@ -376,7 +379,7 @@ func runGUI() {
 			p2Power.SetText("")
 			p2Time.SetText("")
 		}
-		
+
 		tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
 		tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
 
