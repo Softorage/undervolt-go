@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper" // ← add Viper for config file handling :contentReference[oaicite:1]{index=1}
+	"github.com/spf13/viper" // ← add Viper for config file handling
 )
 
 // Version
@@ -81,7 +81,7 @@ func isBatteryDischarging() bool {
 		if err != nil {
 			continue
 		}
-		// “Discharging” indicates battery is being drained :contentReference[oaicite:3]{index=3}
+		// “Discharging” indicates battery is being drained
 		if strings.TrimSpace(string(st)) == "Discharging" {
 			return true
 		}
@@ -417,24 +417,110 @@ func boolToEnabled(b bool) string {
 	return "disabled"
 }
 
+// ---------- Systemd Persistence Functions ----------
+
+const serviceName = "undervolt-go.service"
+const servicePath = "/etc/systemd/system/" + serviceName
+
+func runSystemctlCmd(name string, args ...string) {
+	cmd := exec.Command(name, args...)
+	_ = cmd.Run() // Ignore errors if already stopped/disabled
+}
+
+// enablePersistence creates and enables the systemd service based on current flags
+func enablePersistence() error {
+	assertRoot()
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not get executable path: %v", err)
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return fmt.Errorf("could not resolve executable path: %v", err)
+	}
+
+	// Reconstruct arguments, ignoring --persist
+	var execArgs []string
+	for _, arg := range os.Args[1:] {
+		if arg == "--persist" || arg == "-persist" {
+			continue
+		}
+		// Wrap in quotes if it contains spaces
+		if strings.Contains(arg, " ") {
+			execArgs = append(execArgs, fmt.Sprintf("%q", arg))
+		} else {
+			execArgs = append(execArgs, arg)
+		}
+	}
+
+	execStart := exePath
+	if len(execArgs) > 0 {
+		execStart += " " + strings.Join(execArgs, " ")
+	}
+
+	serviceContent := fmt.Sprintf(`[Unit]
+	Description=Apply Undervolt Go settings on boot and resume
+	After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+	[Service]
+	Type=oneshot
+	ExecStart=%s
+
+	[Install]
+	WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+	`, execStart)
+
+	fmt.Printf("\nCreating systemd service at %s...\n", servicePath)
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+		return fmt.Errorf("failed to write service file: %v", err)
+	}
+
+	runSystemctlCmd("systemctl", "daemon-reload")
+	runSystemctlCmd("systemctl", "enable", serviceName)
+
+	fmt.Println("Persistence enabled successfully. Settings will automatically apply on boot and wake.")
+	return nil
+}
+
+// disablePersistence removes the systemd service entirely
+func disablePersistence() error {
+	assertRoot()
+	fmt.Printf("Removing systemd service %s...\n", servicePath)
+
+	runSystemctlCmd("systemctl", "stop", serviceName)
+	runSystemctlCmd("systemctl", "disable", serviceName)
+
+	if err := os.Remove(servicePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove service file: %v", err)
+	}
+
+	runSystemctlCmd("systemctl", "daemon-reload")
+	runSystemctlCmd("systemctl", "reset-failed")
+
+	fmt.Println("Persistence disabled successfully.")
+	return nil
+}
+
 // ---------- Cobra Command Setup ----------
 
 var (
-	readFlag       bool
-	verboseFlag    bool
-	forceFlag      bool
-	tempFlag       int
-	tempBatFlag    int
-	turboFlag      int
-	coreOffset     float64
-	gpuOffset      float64
-	cacheOffset    float64
-	uncoreOffset   float64
-	analogioOffset float64
+	readFlag           bool
+	verboseFlag        bool
+	forceFlag          bool
+	tempFlag           int
+	tempBatFlag        int
+	turboFlag          int
+	coreOffset         float64
+	gpuOffset          float64
+	cacheOffset        float64
+	uncoreOffset       float64
+	analogioOffset     float64
 	// Use string slices for multi-argument power limit flags.
-	p1Args         []string
-	p2Args         []string
-	lockPowerLimit bool
+	p1Args             []string
+	p2Args             []string
+	lockPowerLimit     bool
+	persistFlag        bool
+	disablePersistFlag bool
 )
 
 func applyFlags() error {
@@ -617,6 +703,23 @@ func applyFlags() error {
 					}
 				}())
 		}
+
+		// Check persistence status
+		fmt.Printf("\nBoot/Resume Persistence Status:\n")
+		if _, err := os.Stat(servicePath); err == nil {
+			fmt.Println("   Status: ENABLED (systemd service active)")
+			content, err := os.ReadFile(servicePath)
+			if err == nil {
+				for _, line := range strings.Split(string(content), "\n") {
+					if strings.HasPrefix(line, "ExecStart=") {
+						fmt.Printf("   Command: %s\n", strings.TrimPrefix(line, "ExecStart="))
+						break
+					}
+				}
+			}
+		} else {
+			fmt.Println("   Status: DISABLED")
+		}
 	}
 	return nil
 }
@@ -627,10 +730,22 @@ var rootCmd = &cobra.Command{
 	Short:   "A tool for undervolting and power limit adjustments to reduce temperatures and extend lifespan",
 	Long:    "\nUndervolt Go\n\nA no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, and more. It also features a user-friendly graphical version which lets you monitor temperatures and fan speeds with the help of 'sensors' package.\n\nPlease use with extreme caution. It has the potential to damage your computer if used incorrectly.",
 	Run: func(cmd *cobra.Command, args []string) {
-		// If no flags are provided, show usage.
+		// If no flags are provided, show usage (or run GUI if implemented)
 		if cmd.Flags().NFlag() == 0 {
 			runGUI()
 			return
+		}
+
+		// Handle --disable-persist
+		if disablePersistFlag {
+			if err := disablePersistence(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error disabling persistence: %v\n", err)
+				os.Exit(1)
+			}
+			// Exit early if that was the only flag passed
+			if cmd.Flags().NFlag() == 1 {
+				return
+			}
 		}
 
 		// Apply the settings
@@ -639,6 +754,13 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		// Handle --persist
+		if persistFlag {
+			if err := enablePersistence(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error enabling persistence: %v\n", err)
+				os.Exit(1)
+			}
+		}
 	},
 }
 
@@ -665,7 +787,10 @@ func init() {
 	rootCmd.PersistentFlags().StringSliceVar(&p2Args, "p2", []string{}, "P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5")
 	rootCmd.PersistentFlags().BoolVar(&lockPowerLimit, "lock-power-limit", false, "Lock the power limit")
 
-	//
+	// Systemd Persistence Flags
+	rootCmd.PersistentFlags().BoolVar(&persistFlag, "persist", false, "Create a systemd service to persist current settings across boot and resume")
+	rootCmd.PersistentFlags().BoolVar(&disablePersistFlag, "disable-persist", false, "Remove the persistence systemd service completely")
+
 	rootCmd.AddCommand(profileCmd)
 	profileCmd.AddCommand(profileSaveCmd, profileListCmd, profileApplyCmd)
 }
@@ -789,10 +914,10 @@ var profileApplyCmd = &cobra.Command{
 		tempBatFlag = p.GetInt("tl.temp-bat")
 		turboFlag = p.GetInt("turbo")
 		/*
-			we can actually do. the only problem is that the values are ints and the flags are strings
-			p1Args := p.GetIntSlice("pl.p1")
-			p2Args := p.GetIntSlice("pl.p2")
-		*/
+		 *			we can actually do. the only problem is that the values are ints and the flags are strings
+		 *			p1Args := p.GetIntSlice("pl.p1")
+		 *			p2Args := p.GetIntSlice("pl.p2")
+		 */
 		// power‑limit slices:
 		if raw := p.Get("pl.p1"); raw != nil {
 			if arr, ok := raw.([]any); ok && len(arr) == 2 {

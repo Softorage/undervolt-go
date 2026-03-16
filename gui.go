@@ -3,11 +3,12 @@
 // gui.go
 
 /*
-✅ 5. Build GUI version
+Build GUI version
 
-go build -tags gui -o undervolt-go-gui .
-go build -tags gui -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go-pro .
-✅ This will include gui.go, and runGUI() will launch your Fyne GUI.
+go build -tags gui -o undervolt-go-gui
+go build -tags gui -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go-pro
+
+This will include gui.go, and runGUI() will launch your Fyne GUI.
 */
 
 package main
@@ -146,6 +147,15 @@ func runGUI() {
 		e.Validator = intValidator
 	}
 
+	// --- Settings Inputs ---
+	persistCheck := widget.NewCheck("Persist the undervolt configuration on reboots", nil)
+	persistInfo := widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed.")
+	persistInfo.Wrapping = fyne.TextWrapWord
+
+	// --- Profile Selects ---
+	profileSaveSelect := widget.NewSelect([]string{"AC", "Battery"}, nil)
+	profileLoadSelect := widget.NewSelect([]string{"Auto", "AC", "Battery"}, nil)
+
 	// --- Flag Collection & Runner ---
 	collect := func() []string {
 		var args []string
@@ -187,6 +197,9 @@ func runGUI() {
 		if p2Power.Text != "" && p2Time.Text != "" {
 			args = append(args, "--p2="+p2Power.Text+","+p2Time.Text)
 		}
+		if persistCheck.Checked {
+			args = append(args, "--persist")
+		}
 		return args
 	}
 
@@ -210,7 +223,7 @@ func runGUI() {
 	}
 
 	// --- Sections & Their Scrollable Content ---
-	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Output"}
+	secNames :=[]string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
 	sectionHeader := make(map[string]*widget.Label)
 	// Create section headers
 	for _, s := range secNames {
@@ -261,6 +274,157 @@ func runGUI() {
 	// Other Flags section
 	otherFlagsSection := container.NewVBox(sectionHeader["Other Flags"], forceCheck, lockCheck, verboseCheck, container.NewHBox(), container.New(layout.NewFormLayout(), widget.NewLabel("Turbo"), turboSelect))
 	secContainers["Other Flags"] = container.NewVScroll(otherFlagsSection)
+
+	// Profiles Section
+	profileSaveBtn := widget.NewButton("Save Profile", func() {
+		name := profileSaveSelect.Selected
+		if name == "" {
+			outputWarningBind.Set("Please select a profile to save.")
+			clearLabelAfter(outputWarningBind, 3*time.Second)
+			return
+		}
+		args := collect()
+		fmt.Println(args)
+		fmt.Println(name)
+		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
+		if len(args) > 0 {
+			if err := run(flags...); err == nil {
+				outputWarningBind.Set("Settings saved successfully as profile " + name + ".")
+				clearLabelAfter(outputWarningBind, 3*time.Second)
+			}
+		}
+	})
+
+	profileLoadBtn := widget.NewButton("Load Profile", func() {
+		name := profileLoadSelect.Selected
+		if name == "" {
+			outputWarningBind.Set("Please select a profile to load.")
+			clearLabelAfter(outputWarningBind, 3*time.Second)
+			return
+		}
+
+		// Kind of a duplication of code from main.go
+		actualName := name
+		if actualName == "Auto" {
+			if isBatteryDischarging() {
+				actualName = "Battery"
+			} else {
+				actualName = "AC"
+			}
+		}
+
+		key := "profiles." + strings.ToLower(actualName)
+		if !viper.IsSet(key) {
+			outputWarningBind.Set(fmt.Sprintf("Profile '%s' not found.", actualName))
+			clearLabelAfter(outputWarningBind, 3*time.Second)
+			return
+		}
+
+		// Get the values from the profile
+		p := viper.Sub(key)
+		coreOffset := p.GetFloat64("planes.core")
+		gpuOffset := p.GetFloat64("planes.gpu")
+		cacheOffset := p.GetFloat64("planes.cache")
+		uncoreOffset := p.GetFloat64("planes.uncore")
+		analogioOffset := p.GetFloat64("planes.analogio")
+		tempFlag := p.GetInt("tl.temp")
+		tempBatFlag := p.GetInt("tl.temp-bat")
+		turboFlag := p.GetInt("turbo")
+
+		p1Args := p.GetIntSlice("pl.p1")
+		p2Args := p.GetIntSlice("pl.p2")
+		fmt.Println(p1Args, p2Args)
+		/* below code is useful if the values of p1 or p2 array float
+		   if raw := p.Get("pl.p1"); raw != nil {
+		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
+		       p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+		     }
+		   }
+		   if raw := p.Get("pl.p2"); raw != nil {
+		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
+		       p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+		     }
+		   }
+		*/
+
+		// Update the values in the entry widgets
+		for _, p := range planes {
+			switch p.name {
+			case "Core":
+				p.entry.SetText(fmt.Sprintf("%f", coreOffset))
+			case "Cache":
+				p.entry.SetText(fmt.Sprintf("%f", cacheOffset))
+			case "GPU":
+				p.entry.SetText(fmt.Sprintf("%f", gpuOffset))
+			case "Uncore":
+				p.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
+			case "AnalogIO":
+				p.entry.SetText(fmt.Sprintf("%f", analogioOffset))
+			}
+		}
+		if len(p1Args) == 2 {
+			p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
+			p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
+		} else {
+			p1Power.SetText("")
+			p1Time.SetText("")
+		}
+		if len(p2Args) == 2 {
+			p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
+			p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
+		} else {
+			p2Power.SetText("")
+			p2Time.SetText("")
+		}
+		
+		tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
+		tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
+
+		turboProfile := ""
+		for option, value := range turboOptions {
+			if value == strconv.Itoa(turboFlag) {
+				turboProfile = option
+				break
+			}
+		}
+		if turboProfile != "" {
+			turboSelect.SetSelected(turboProfile)
+		} else {
+			turboSelect.ClearSelected()
+		}
+
+		outputWarningBind.Set(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName))
+		clearLabelAfter(outputWarningBind, 3*time.Second)
+	})
+
+	profilesSection := container.NewVBox(
+		sectionHeader["Profiles"],
+		widget.NewLabel("Save current settings to a profile:"),
+		profileSaveSelect,
+		profileSaveBtn,
+		widget.NewLabel(""),
+		widget.NewLabel("Load settings from a profile:"),
+		profileLoadSelect,
+		profileLoadBtn,
+	)
+	secContainers["Profiles"] = container.NewVScroll(profilesSection)
+
+	// Settings section
+	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
+		if err := run("--disable-persist"); err == nil {
+			outputWarningBind.Set("Persisted configuration cleared successfully.")
+			clearLabelAfter(outputWarningBind, 3*time.Second)
+		}
+	})
+
+	settingsSection := container.NewVBox(
+		sectionHeader["Settings"],
+		persistCheck,
+		persistInfo,
+		widget.NewLabel(""),
+		clearPersistBtn,
+	)
+	secContainers["Settings"] = container.NewVScroll(settingsSection)
 
 	// Output section
 	// ─── Monitoring state ───────────────────────────────────────────────────────────
@@ -378,8 +542,8 @@ func runGUI() {
 
 	// ─── OUTPUT SECTION ────────────────────────────────────────────────────────────
 	outputSection := container.NewBorder(
-		// Top: the “Output” header
-		sectionHeader["Output"],
+		// Top: the Output header
+		sectionHeader["Status"],
 		// Bottom: warning + buttons
 		btnBar,
 		// Left / Right: none
@@ -388,7 +552,7 @@ func runGUI() {
 		container.NewVScroll(outputLabel),
 	)
 
-	secContainers["Output"] = outputSection
+	secContainers["Status"] = outputSection
 
 	// Section container (only one visible at a time)
 	sectionContainer := container.NewMax()
@@ -432,102 +596,12 @@ func runGUI() {
 		}
 	})
 
-	profileSelect := widget.NewSelect([]string{"AC", "Battery"}, nil)
-
-	profileSaveBtn := widget.NewButton("Save Profile", func() {
-		name := profileSelect.Selected
-		args := collect()
-		fmt.Println(args)
-		fmt.Println(name)
-		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
-		if len(args) > 0 {
-			if err := run(flags...); err == nil {
-				outputWarningBind.Set("Settings saved successfully as profile " + name + ".")
-				clearLabelAfter(outputWarningBind, 3*time.Second)
-			}
-		}
-	})
-
-	profileLoadBtn := widget.NewButton("Load Profile", func() {
-		name := profileSelect.Selected
-		//updateViaProfile(name)
-		key := "profiles." + name
-		if !viper.IsSet(key) {
-			fmt.Printf("Profile '%s' not found.\n", name)
-			return
-		}
-		// Get the values from the profile
-		p := viper.Sub(key)
-		coreOffset := p.GetFloat64("planes.core")
-		gpuOffset := p.GetFloat64("planes.gpu")
-		cacheOffset := p.GetFloat64("planes.cache")
-		uncoreOffset := p.GetFloat64("planes.uncore")
-		analogioOffset := p.GetFloat64("planes.analogio")
-		tempFlag := p.GetInt("tl.temp")
-		tempBatFlag := p.GetInt("tl.temp-bat")
-		turboFlag := p.GetInt("turbo")
-
-		p1Args := p.GetIntSlice("pl.p1")
-		p2Args := p.GetIntSlice("pl.p2")
-		fmt.Println(p1Args, p2Args)
-		/* below code is useful if the values of p1 or p2 array float
-		   if raw := p.Get("pl.p1"); raw != nil {
-		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
-		       p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-		     }
-		   }
-		   if raw := p.Get("pl.p2"); raw != nil {
-		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
-		       p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-		     }
-		   }
-		*/
-
-		// Update the values in the entry widgets
-		for _, p := range planes {
-			switch p.name {
-			case "Core":
-				p.entry.SetText(fmt.Sprintf("%f", coreOffset))
-			case "Cache":
-				p.entry.SetText(fmt.Sprintf("%f", cacheOffset))
-			case "GPU":
-				p.entry.SetText(fmt.Sprintf("%f", gpuOffset))
-			case "Uncore":
-				p.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
-			case "AnalogIO":
-				p.entry.SetText(fmt.Sprintf("%f", analogioOffset))
-			}
-		}
-		if len(p1Args) == 2 {
-			p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
-			p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
-		}
-		if len(p2Args) == 2 {
-			p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
-			p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
-		}
-		// Update the values in the check widgets
-		// Assuming you have check widgets for temp, temp-bat, and turbo
-		tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
-		tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
-
-		turboProfile := ""
-		for option, value := range turboOptions {
-			if value == strconv.Itoa(turboFlag) {
-				turboProfile = option
-				break
-			}
-		}
-		turboSelect.SetSelected(turboProfile)
-	})
-
-	mainBtnBar := container.NewHBox(layout.NewSpacer(), profileSaveBtn, profileLoadBtn, settingsApplyBtn)
-	mainMenuBar := container.NewHBox(layout.NewSpacer(), widget.NewLabel("Profile: "), profileSelect)
+	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn)
 
 	// --- Combine: HSplit + Border for button bar ---
 	split := container.NewHSplit(sidebar, sectionContent)
 	split.SetOffset(0.33) // sidebar gets 33% of width
-	content := container.NewBorder(mainMenuBar, mainBtnBar, nil, nil, split)
+	content := container.NewBorder(nil, mainBtnBar, nil, nil, split)
 
 	w.SetContent(content)
 	w.ShowAndRun()

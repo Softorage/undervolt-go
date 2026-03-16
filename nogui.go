@@ -3,9 +3,10 @@
 /*
  4. Build CLI-only version
 
-go build -o undervolt-go .
-go build -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go .
-✅ This will exclude GUI code and dependencies like fyne.
+go build -o undervolt-go
+go build -ldflags="-X main.version=$(git describe --tags)" -o undervolt-go
+
+This will exclude GUI code and dependencies like fyne.
 */
 
 package main
