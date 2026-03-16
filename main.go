@@ -799,16 +799,18 @@ func init() {
 // either the real user (if invoked via sudo) or the current user.
 func configDir() string {
 	// 1) If sudo was used, SUDO_USER tells us who really invoked us
-	if su := os.Getenv("SUDO_USER"); su != "" {
-		if u, err := user.Lookup(su); err == nil {
-			return filepath.Join(u.HomeDir, ".config", "undervolt-go")
+	/*
+		if su := os.Getenv("SUDO_USER"); su != "" {
+			if u, err := user.Lookup(su); err == nil {
+				return filepath.Join(u.HomeDir, ".config", "undervolt-go")
+			}
 		}
-	}
-	// 2) Otherwise, use the normal user config directory
-	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "undervolt-go")
-	}
-	// 3) Fallback to HOME
+		// 2) Otherwise, use the normal user config directory
+		if dir, err := os.UserConfigDir(); err == nil {
+			return filepath.Join(dir, "undervolt-go")
+		}
+	*/
+	// 3) Fallback to HOME. NOPE. ALWAYS USE HOME.
 	return filepath.Join(os.Getenv("HOME"), ".config", "undervolt-go")
 }
 
