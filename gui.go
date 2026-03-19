@@ -490,14 +490,14 @@ func runGUI() {
 		}
 		stopMonitor = make(chan struct{})
 		monitorTicker = time.NewTicker(1 * time.Second)
-		go func() {
+		// Pass channels into the goroutine as arguments so it holds steady references
+		// even if the outer variables are set to nil by the UI thread.
+		go func(stop chan struct{}, ticker *time.Ticker) {
 			for {
 				select {
-				case <-stopMonitor:
-					monitorTicker.Stop()
-					monitorTicker = nil
+				case <-stop:
 					return
-				case <-monitorTicker.C:
+				case <-ticker.C:
 					// run via shell so pipes/greps work
 					cmd := exec.Command("sh", "-c", command)
 					var buf bytes.Buffer
@@ -507,18 +507,23 @@ func runGUI() {
 						buf.WriteString("\nError: " + err.Error())
 					}
 					text := buf.String()
-					// update UI on main thread
+					// update UI on main thread safely
 					outputLabelBinding.Set(text)
 				}
 			}
-		}()
+		}(stopMonitor, monitorTicker)
 	}
 
 	// stopMonitorFunc tells that goroutine to exit
 	stopMonitorFunc := func() {
 		if stopMonitor != nil {
-			close(stopMonitor)
+			close(stopMonitor) // Wakes up the blocking select statement
 			stopMonitor = nil
+		}
+		// Safely clear the ticker state purely on the main UI thread to avoid data races
+		if monitorTicker != nil {
+			monitorTicker.Stop()
+			monitorTicker = nil
 		}
 	}
 
