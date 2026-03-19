@@ -123,35 +123,26 @@ To install **Undervolt Go** on your system, follow these steps:
     Please use with extreme caution. It has the potential to damage your computer if used incorrectly.
 
     Usage:
-      `undervolt-go [flags]`
-      `undervolt-go [command]`
+      undervolt-go [flags]
+      undervolt-go [command]
 
     Available Commands:
       completion  Generate the autocompletion script for the specified shell
       help        Help about any command
       profile     Manage saved profiles
-        Usage:
-          `undervolt-go profile [command]`
-
-        Available Sub-commands:
-          apply       Apply given profile
-            Usage:
-              `undervolt-go profile apply [auto|ac|battery] [flags]`
-          list        List available profiles
-          save        Save current flags as a profile
-            Usage:
-              `undervolt-go profile save [ac|battery] [flags]`
 
     Flags:
           --analogio float     AnalogIO offset (mV) (default NaN)
           --cache float        Cache offset (mV) (default NaN)
           --core float         Core offset (mV) (default NaN)
+          --disable-persist    Remove the persistence systemd service completely
           --force              Allow setting positive offsets
           --gpu float          GPU offset (mV) (default NaN)
       -h, --help               help for undervolt-go
           --lock-power-limit   Lock the power limit
           --p1 strings         P1 Power Limit (W) and Time Window (s), e.g., --p1=35,10
           --p2 strings         P2 Power Limit (W) and Time Window (s), e.g., --p2=45,5
+          --persist            Create a systemd service to persist current settings across boot and resume
           --read               Read existing values
           --temp int           Set temperature target on AC (°C) (default -1)
           --temp-bat int       Set temperature target on battery (°C) (default -1)
@@ -161,7 +152,10 @@ To install **Undervolt Go** on your system, follow these steps:
       -v, --version            version for undervolt-go
 
     Use "undervolt-go [command] --help" for more information about a command.
+
    ```
+
+  6. Make sure to use `undervolt-go-pro` instead of `undervolt-go` in terminal in case you have installed the GUI version.
 
 ## Features
 
@@ -171,22 +165,24 @@ To install **Undervolt Go** on your system, follow these steps:
 - **Power Limit Configuration:** Adjust the CPU's power limits to control performance and power consumption.
 - **Intel Turbo Adjustment:** Enable or disable Intel Turbo for optimal performance.
 - **Profile Management:** Save and apply profiles for quick configuration changes.
-- **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power. (Coming soon)
+- **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power.
 - **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
 - **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
 
 ## Screenshots
 | Description | Screenshot |
 | --- | --- |
-| Voltage Offsets | ![Voltage Offsets](/dist/images/screenshots/v0.5.4/VoltOffset-UndervoltGo.png) |
-| Power Limit | ![Power Limit](/dist/images/screenshots/v0.5.4/PowerLimit-UndervoltGo.png) |
-| Temperature Limit | ![Temperature Limit](/dist/images/screenshots/v0.5.4/TempLimit-UndervoltGo.png) |
-| Other Flags | ![Other Flags](/dist/images/screenshots/v0.5.4/OtherFlags-UndervoltGo.png) |
-| Output | ![Output](/dist/images/screenshots/v0.5.4/Output-UndervoltGo.png) |
-| Check Core Temps | ![Check Core Temps](/dist/images/screenshots/v0.5.4/CheckTemp-UndervoltGo.png) |
-| Check Fan RPMs | ![Check Fan RPMs](/dist/images/screenshots/v0.5.4/CheckFans-UndervoltGo.png) |
-| Read | ![Read](/dist/images/screenshots/v0.5.4/Read-UndervoltGo.png) |
-| Version | ![Version](/dist/images/screenshots/v0.5.4/Ver-UndervoltGo.png) |
+| Voltage Offsets | ![Voltage Offsets](/dist/images/screenshots/v0.6.2/VoltOffset-UndervoltGo.png) |
+| Power Limit | ![Power Limit](/dist/images/screenshots/v0.6.2/PowerLimit-UndervoltGo.png) |
+| Temperature Limit | ![Temperature Limit](/dist/images/screenshots/v0.6.2/TempLimit-UndervoltGo.png) |
+| Other Flags | ![Other Flags](/dist/images/screenshots/v0.6.2/OtherFlags-UndervoltGo.png) |
+| Profiles | ![Profiles](/dist/images/screenshots/v0.6.2/Profiles-UndervoltGo.png) |
+| Save Profile | ![Save Profile](/dist/images/screenshots/v0.6.2/SaveProfile-UndervoltGo.png) |
+| Load Profile | ![Load Profile](/dist/images/screenshots/v0.6.2/LoadProfile-UndervoltGo.png) |
+| Settings | ![Settings](/dist/images/screenshots/v0.6.2/Settings-UndervoltGo.png) |
+| Check Core Temps | ![Check Core Temps](/dist/images/screenshots/v0.6.2/CheckTemp-UndervoltGo.png) |
+| Check Fan RPMs | ![Check Fan RPMs](/dist/images/screenshots/v0.6.2/CheckFans-UndervoltGo.png) |
+| Read | ![Read](/dist/images/screenshots/v0.6.2/Read-UndervoltGo.png) |
 
 ## Dependencies
 
@@ -203,18 +199,9 @@ To install **Undervolt Go** on your system, follow these steps:
 
 ## Configuration
 
-You can save configuration using the `profile save [ac/battery] --flags` command. Saved profiles are automatically applied based on AC or battery power.
+You can save configuration using the `profile save [ac/battery] --flags` command. You can also automatically apply saved profiles based on AC or battery power.
 
-To maintain settings across reboots, you can either consider creating a startup script that runs your preferred `undervolt-go` command, or add the preferred `undervolt-go` command in `.profile` file. You may need to edit the `sudoers` file to allow running `undervolt-go` as sudo without requiring password.
-
-To edit `sudoers` file,
-1. Type in terminal `sudo visudo`.
-2. Add the below line at last of the sudoers file to allow running **Undervolt Go** as sudo without requiring password
-    - `username ALL=(ALL) NOPASSWD: /usr/local/bin/undervolt-go`
-    - `username ALL=(ALL) NOPASSWD: /usr/local/bin/undervolt-go-pro` # in case you are using the graphical version
-3. `Ctrl`+`X` to exit, `y` and `enter` to save.
-4. Make sure that you are absolutely sure that the computer won't crash with the commands that you are putting in `.profile`. Otherwise, your computer will always crash upon login. In such a case, you may try to shift to `tty4` (`Ctrl`+`Alt`+`F4`) before login (or any other `tty`), and remove the commands causing issues from `.profile` file. This would usually work if X Server is causing issues.
-
+To maintain settings across reboots, you can now use the --persist flag that creates a small systemd service. Make sure that the configuration that you are persisting across boots is a stable configuration.
 
 ## Examples
 
