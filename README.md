@@ -199,9 +199,10 @@ To install **Undervolt Go** on your system, follow these steps:
 
 ## Configuration
 
-You can save configuration using the `profile save [ac/battery] --flags` command. You can also automatically apply saved profiles based on AC or battery power.
-
-To maintain settings across reboots, you can now use the --persist flag that creates a small systemd service. Make sure that the configuration that you are persisting across boots is a stable configuration.
+- You can save configuration using the `profile save [ac/battery] --flags` command.
+- You can apply configuration using the `profile apply [auto|ac|battery]` command.
+- You can also automatically apply saved profiles based on whether the computer is on AC or battery power with `profile auto-switch [enable|disable]`.
+- To maintain settings across reboots, you can now use the --persist flag that creates a small systemd service. Make sure that the configuration that you are persisting across boots is a stable configuration: `--core=-70 --cache=-50 --p1=40,32 --p2=60,10 --turbo=0 --temp=78 --temp-bat=66 --persist`
 
 ## Examples
 

@@ -37,6 +37,66 @@ import (
 // Used in main.go by rootCmd
 const rootCmdUseString = "undervolt-go-pro"
 
+// Custom Widgets for Showing Info on Interaction
+type infoEntry struct {
+	widget.Entry
+	infoMsg  string
+	showInfo func(string, time.Duration)
+}
+
+func newInfoEntry(msg string, show func(string, time.Duration)) *infoEntry {
+	e := &infoEntry{infoMsg: msg, showInfo: show}
+	e.ExtendBaseWidget(e)
+	return e
+}
+
+func (e *infoEntry) FocusGained() {
+	e.Entry.FocusGained()
+	if e.infoMsg != "" && e.showInfo != nil {
+		e.showInfo(e.infoMsg, 6*time.Second)
+	}
+}
+
+type infoCheck struct {
+	widget.Check
+	infoMsg  string
+	showInfo func(string, time.Duration)
+}
+
+func newInfoCheck(label, msg string, show func(string, time.Duration)) *infoCheck {
+	c := &infoCheck{infoMsg: msg, showInfo: show}
+	c.Text = label
+	c.ExtendBaseWidget(c)
+	return c
+}
+
+func (c *infoCheck) Tapped(pe *fyne.PointEvent) {
+	c.Check.Tapped(pe)
+	if c.infoMsg != "" && c.showInfo != nil {
+		c.showInfo(c.infoMsg, 6*time.Second)
+	}
+}
+
+type infoSelect struct {
+	widget.Select
+	infoMsg  string
+	showInfo func(string, time.Duration)
+}
+
+func newInfoSelect(options[]string, msg string, show func(string, time.Duration)) *infoSelect {
+	s := &infoSelect{infoMsg: msg, showInfo: show}
+	s.Options = options
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+func (s *infoSelect) Tapped(pe *fyne.PointEvent) {
+	s.Select.Tapped(pe)
+	if s.infoMsg != "" && s.showInfo != nil {
+		s.showInfo(s.infoMsg, 6*time.Second)
+	}
+}
+
 func runGUI() {
 	a := app.NewWithID("com.softorage.undervolt-go")
 	// Set dark theme
@@ -51,29 +111,41 @@ func runGUI() {
 	outputLabel := widget.NewLabelWithData(outputLabelBinding)
 	outputLabel.Wrapping = fyne.TextWrapWord // wrap long lines
 
-	// --- Output Pane (read-only) ---
+	// Output Pane (read-only)
 	outputWarningBind := binding.NewString()
 	outputWarning := widget.NewLabelWithData(outputWarningBind)
+	outputWarning.Wrapping = fyne.TextWrapWord // wrap tooltip texts preventing UI jumping
 
-	// --- Voltage Offset Inputs (with enable checkboxes) ---
+	// Centralized warning handler that prevents premature clearing of messages
+	var warningTimer *time.Timer
+	showWarning := func(msg string, duration time.Duration) {
+		outputWarningBind.Set(msg)
+		if warningTimer != nil {
+			warningTimer.Stop()
+		}
+		if duration > 0 {
+			warningTimer = time.AfterFunc(duration, func() {
+				outputWarningBind.Set("")
+			})
+		}
+	}
+
+	// Voltage Offset Inputs (with enable checkboxes)
 	type planeUI struct {
 		name    string
 		command string
-		entry   *widget.Entry
-		check   *widget.Check
+		entry   *infoEntry
+		check   *infoCheck
 	}
-	planes := []planeUI{
-		{"Core", "core", widget.NewEntry(), widget.NewCheck("", nil)},
-		{"Cache", "cache", widget.NewEntry(), widget.NewCheck("", nil)},
-		{"GPU", "gpu", widget.NewEntry(), widget.NewCheck("", nil)},
-		{"Uncore", "uncore", widget.NewEntry(), widget.NewCheck("", nil)},
-		{"AnalogIO", "analogio", widget.NewEntry(), widget.NewCheck("", nil)},
+	planes :=[]planeUI{
+		{"Core", "core", newInfoEntry("Voltage offset for Core plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for Core plane", showWarning)},
+		{"Cache", "cache", newInfoEntry("Voltage offset for Cache plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for Cache plane", showWarning)},
+		{"GPU", "gpu", newInfoEntry("Voltage offset for GPU plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for GPU plane", showWarning)},
+		{"Uncore", "uncore", newInfoEntry("Voltage offset for Uncore plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for Uncore plane", showWarning)},
+		{"AnalogIO", "analogio", newInfoEntry("Voltage offset for AnalogIO plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for AnalogIO plane", showWarning)},
 	}
 	for _, p := range planes {
 		p.entry.SetPlaceHolder("e.g. -50.000")
-		//p.entry.SetTooltip("Voltage offset for " + p.name + " plane (e.g., -50.000 mV)")
-		//p.check.SetTooltip("Enable undervolt for " + p.name + " plane")
-
 		p.entry.Validator = func(s string) error {
 			if s == "" {
 				return nil
@@ -85,22 +157,18 @@ func runGUI() {
 		}
 	}
 
-	// --- Power Limit Inputs ---
-	p1Power := widget.NewEntry()
+	// Power Limit Inputs
+	p1Power := newInfoEntry("P1 power limit in watts (e.g., 45) is the long term power limit, that can be safe for longer periods.", showWarning)
 	p1Power.SetPlaceHolder("Power (W)")
-	//p1Power.SetTooltip("P1 power limit in watts (e.g., 45) is the long term power limit, that can be safe for longer periods")
 
-	p1Time := widget.NewEntry()
+	p1Time := newInfoEntry("Time window for P1 in seconds (e.g., 28).", showWarning)
 	p1Time.SetPlaceHolder("Time (s)")
-	//p1Time.SetTooltip("Time window for P1 in seconds (e.g., 28)")
 
-	p2Power := widget.NewEntry()
+	p2Power := newInfoEntry("P2 power limit in watts (e.g., 60) is the short term power limit, that can be safe for shorter periods and is useful for short bursts of performance.", showWarning)
 	p2Power.SetPlaceHolder("Power (W)")
-	//p2Power.SetTooltip("P2 power limit in watts (e.g., 60) is the short term power limit, that can be safe for shorter periods and is useful for short bursts of performance.")
 
-	p2Time := widget.NewEntry()
+	p2Time := newInfoEntry("Time window for P2 in seconds (e.g., 2).", showWarning)
 	p2Time.SetPlaceHolder("Time (s)")
-	//p2Time.SetTooltip("Time window for P2 in seconds (e.g., 2)")
 
 	// Validate whether the input is an integer
 	intValidator := func(s string) error {
@@ -112,51 +180,44 @@ func runGUI() {
 		}
 		return nil
 	}
-	for _, e := range []*widget.Entry{p1Power, p1Time, p2Power, p2Time} {
+	for _, e := range []*infoEntry{p1Power, p1Time, p2Power, p2Time} {
 		e.Validator = intValidator
 	}
 
-	// --- Other Flags ---
-	forceCheck := widget.NewCheck("Force positive voltage offsets", nil)
-	//forceCheck.SetTooltip("Force writing positive voltage offsets (useful for overclocking). Be very careful. This is danger zone and may permanantly damage your CPU or other components if you don't 100% know what you are doing.")
+	// Other Flags
+	forceCheck := newInfoCheck("Force positive voltage offsets", "Force writing positive voltage offsets (useful for overclocking). Be very careful. This is danger zone and may permanantly damage your CPU or other components if you don't 100% know what you are doing.", showWarning)
 
-	lockCheck := widget.NewCheck("Lock power limit", nil)
-	//lockCheck.SetTooltip("Lock the power limit settings to prevent changes")
+	lockCheck := newInfoCheck("Lock power limit", "Lock the power limit settings to prevent changes.", showWarning)
 
-	verboseCheck := widget.NewCheck("Enable Verbose Output", nil)
-	//verboseCheck.SetTooltip("Enable detailed output from undervolt-go")
+	verboseCheck := newInfoCheck("Enable Verbose Output", "Enable detailed output from undervolt-go.", showWarning)
 
 	turboOptions := map[string]string{
 		"Default":  "-1",
 		"Enabled":  "0",
 		"Disabled": "1",
 	}
-	turboSelect := widget.NewSelect([]string{"Default", "Enabled", "Disabled"}, nil)
-	//turboSelect.SetTooltip("Control turbo mode:\n- Default: No change\n- Enabled: Allow turbo\n- Disabled: Block turbo")
-	//SetTooltip(turboSelect, "Control turbo mode:\n- Default: No change\n- Enabled: Allow turbo\n- Disabled: Block turbo")
+	turboSelect := newInfoSelect([]string{"Default", "Enabled", "Disabled"}, "Control turbo mode: Default (No change), Enabled (Allow turbo), Disabled (Block turbo).", showWarning)
 
-	// --- Temperature Inputs ---
-	tempEntry := widget.NewEntry()
+	// Temperature Inputs
+	tempEntry := newInfoEntry("Maximum temperature on AC power (°C).", showWarning)
 	tempEntry.SetPlaceHolder("AC °C")
-	//tempEntry.SetTooltip("Maximum temperature on AC power (°C)")
 
-	tempBatEntry := widget.NewEntry()
+	tempBatEntry := newInfoEntry("Maximum temperature on battery (°C).", showWarning)
 	tempBatEntry.SetPlaceHolder("Battery °C")
-	//tempBatEntry.SetTooltip("Maximum temperature on battery (°C)")
-	for _, e := range []*widget.Entry{tempEntry, tempBatEntry} {
+	for _, e := range []*infoEntry{tempEntry, tempBatEntry} {
 		e.Validator = intValidator
 	}
 
-	// --- Settings Inputs ---
+	// Settings Inputs
 	persistCheck := widget.NewCheck("Persist the undervolt configuration on reboots", nil)
 	persistInfo := widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed.")
 	persistInfo.Wrapping = fyne.TextWrapWord
 
-	// --- Profile Selects ---
+	// Profile Selects
 	profileSaveSelect := widget.NewSelect([]string{"AC", "Battery"}, nil)
 	profileLoadSelect := widget.NewSelect([]string{"Auto", "AC", "Battery"}, nil)
 
-	// --- Flag Collection & Runner ---
+	// Flag Collection & Runner
 	collect := func() []string {
 		var args []string
 		var outputLabelAlertArray []string
@@ -169,8 +230,7 @@ func runGUI() {
 		}
 		if len(outputLabelAlertArray) > 0 {
 			outputLabelBinding.Set(strings.Join(outputLabelAlertArray, "\n"))
-			outputWarningBind.Set("Error occured when applying Voltage Offset settings. Please check 'Output' pane for more information.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Error occured when applying Voltage Offset settings. Please check 'Output' pane for more information.", 3*time.Second)
 		}
 
 		if forceCheck.Checked {
@@ -205,7 +265,7 @@ func runGUI() {
 
 	//
 	run := func(flags ...string) error {
-		cmd := exec.Command("sudo", append([]string{"undervolt-go-pro"}, flags...)...)
+		cmd := exec.Command("sudo", append([]string{rootCmdUseString}, flags...)...)
 		// Redirect command output to a buffer for display in the Output Pane.
 		// Redirect both stdout and stderr to the same buffer, so that any error
 		// messages are included in the output.
@@ -215,14 +275,13 @@ func runGUI() {
 		err := cmd.Run()
 		if err != nil {
 			buf.WriteString("\nError: " + err.Error())
-			outputWarningBind.Set("Error occured when applying settings. Please check 'Output' pane for more information.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Error occured when applying settings. Please check 'Output' pane for more information.", 3*time.Second)
 		}
 		outputLabelBinding.Set(buf.String())
 		return err
 	}
 
-	// --- Sections & Their Scrollable Content ---
+	// Sections & Their Scrollable Content
 	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
 	sectionHeader := make(map[string]*widget.Label)
 	// Create section headers
@@ -279,16 +338,14 @@ func runGUI() {
 	profileSaveBtn := widget.NewButton("Save Profile", func() {
 		name := profileSaveSelect.Selected
 		if name == "" {
-			outputWarningBind.Set("Please select a profile to save.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please select a profile to save.", 3*time.Second)
 			return
 		}
 		args := collect()
 		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
 		if len(args) > 0 {
 			if err := run(flags...); err == nil {
-				outputWarningBind.Set("Settings saved successfully as profile " + name + ".")
-				clearLabelAfter(outputWarningBind, 3*time.Second)
+				showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
 			}
 		}
 	})
@@ -296,8 +353,7 @@ func runGUI() {
 	profileLoadBtn := widget.NewButton("Load Profile", func() {
 		name := profileLoadSelect.Selected
 		if name == "" {
-			outputWarningBind.Set("Please select a profile to load.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please select a profile to load.", 3*time.Second)
 			return
 		}
 
@@ -316,8 +372,7 @@ func runGUI() {
 
 		key := "profiles." + strings.ToLower(actualName)
 		if !viper.IsSet(key) {
-			outputWarningBind.Set(fmt.Sprintf("Profile '%s' not found.", actualName))
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning(fmt.Sprintf("Profile '%s' not found.", actualName), 3*time.Second)
 			return
 		}
 
@@ -393,8 +448,7 @@ func runGUI() {
 			turboSelect.ClearSelected()
 		}
 
-		outputWarningBind.Set(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName))
-		clearLabelAfter(outputWarningBind, 3*time.Second)
+		showWarning(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName), 3*time.Second)
 	})
 
 	// Helper to check if the auto-switch udev rule exists
@@ -422,20 +476,17 @@ func runGUI() {
 		if !isAutoSwitchEnabled() {
 			// Check if profiles exist before allowing it to be enabled
 			if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
-				outputWarningBind.Set("Both 'ac' and 'battery' profiles must exist before enabling auto-profile switching.")
-				clearLabelAfter(outputWarningBind, 4*time.Second)
+				showWarning("Both 'AC' and 'Battery' profiles must exist before enabling auto-profile switching.", 4*time.Second)
 				return
 			}
 
 			// Execute backend command
 			if err := run("profile", "auto-switch", "enable"); err == nil {
-				outputWarningBind.Set("Auto profile switching enabled.")
-				clearLabelAfter(outputWarningBind, 3*time.Second)
+				showWarning("Auto profile switching enabled.", 3*time.Second)
 			}
 		} else {
 			if err := run("profile", "auto-switch", "disable"); err == nil {
-				outputWarningBind.Set("Auto profile switching disabled.")
-				clearLabelAfter(outputWarningBind, 3*time.Second)
+				showWarning("Auto profile switching disabled.", 3*time.Second)
 			}
 		}
 		updateAutoSwitchBtn() // Update text after clicking
@@ -460,8 +511,7 @@ func runGUI() {
 	// Settings section
 	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
 		if err := run("--disable-persist"); err == nil {
-			outputWarningBind.Set("Persisted configuration cleared successfully.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Persisted configuration cleared successfully.", 3*time.Second)
 		}
 	})
 
@@ -475,7 +525,7 @@ func runGUI() {
 	secContainers["Settings"] = container.NewVScroll(settingsSection)
 
 	// Output section
-	// ─── Monitoring state ───────────────────────────────────────────────────────────
+	// Monitoring state
 	// these let us start/stop a 1 Hz loop
 	var (
 		monitorTicker *time.Ticker
@@ -527,57 +577,48 @@ func runGUI() {
 		}
 	}
 
-	// ─── Buttons ───────────────────────────────────────────────────────────────────
+	// Buttons
 	readBtn := widget.NewButton("Read", func() {
 		if monitorTicker != nil {
-			outputWarningBind.Set("Please click 'Stop' before running this command.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
 			return
 		}
 		_ = run("--read")
 	})
 	helpBtn := widget.NewButton("Help", func() {
 		if monitorTicker != nil {
-			outputWarningBind.Set("Please click 'Stop' before running this command.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
 			return
 		}
 		_ = run("--help")
 	})
 	checkTempsBtn := widget.NewButton("Check Temps", func() {
 		if monitorTicker != nil {
-			outputWarningBind.Set("Please click 'Stop' before running this command.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
 			return
 		}
-		outputWarningBind.Set("Please click 'Stop' before running any other command or closing the app.")
-		clearLabelAfter(outputWarningBind, 3*time.Second)
+		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
 		startMonitor("sensors | grep Core")
 	})
 	checkFansBtn := widget.NewButton("Check Fans", func() {
 		if monitorTicker != nil {
-			outputWarningBind.Set("Please click 'Stop' before running this command.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
 			return
 		}
-		outputWarningBind.Set("Please click 'Stop' before running any other command or closing the app.")
-		clearLabelAfter(outputWarningBind, 3*time.Second)
+		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
 		startMonitor("sensors | grep -e cpu_fan -e gpu_fan")
 	})
 	stopBtn := widget.NewButton("Stop", func() {
 		if monitorTicker == nil {
-			outputWarningBind.Set("Nothing to stop there. You're good. :)")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Nothing to stop there. You're good. :)", 3*time.Second)
 			return
 		}
 		stopMonitorFunc()
-		outputWarningBind.Set("Monitoring stopped. You may now run other commands.")
-		clearLabelAfter(outputWarningBind, 3*time.Second)
+		showWarning("Monitoring stopped. You may now run other commands.", 3*time.Second)
 	})
 	verBtn := widget.NewButton("Version", func() {
 		if monitorTicker != nil {
-			outputWarningBind.Set("Please click 'Stop' before running this command.")
-			clearLabelAfter(outputWarningBind, 3*time.Second)
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
 			return
 		}
 		_ = run("--version")
@@ -593,7 +634,7 @@ func runGUI() {
 		verBtn,
 	)
 
-	// ─── OUTPUT SECTION ────────────────────────────────────────────────────────────
+	// OUTPUT SECTION
 	outputSection := container.NewBorder(
 		// Top: the Output header
 		sectionHeader["Status"],
@@ -618,7 +659,7 @@ func runGUI() {
 		nil, outputWarning, nil, nil, sectionContainer,
 	)
 
-	// --- Sidebar (33% width) ---
+	// Sidebar (33% width)
 	sideBtns := make([]fyne.CanvasObject, len(secNames))
 	for i, name := range secNames {
 		n := name
@@ -638,33 +679,23 @@ func runGUI() {
 	// the sidebar
 	sidebar := container.NewVScroll(sidebarContent)
 
-	// --- Action Buttons (docked bottom‑right) ---
+	// Action Buttons (docked bottom‑right)
 	settingsApplyBtn := widget.NewButton("Apply", func() {
 		// without len(collect()) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
 		if len(collect()) > 0 {
 			if err := run(collect()...); err == nil {
-				outputWarningBind.Set("Settings applied successfully.")
-				clearLabelAfter(outputWarningBind, 3*time.Second)
+				showWarning("Settings applied successfully.", 3*time.Second)
 			}
 		}
 	})
 
 	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn)
 
-	// --- Combine: HSplit + Border for button bar ---
+	// Combine: HSplit + Border for button bar
 	split := container.NewHSplit(sidebar, sectionContent)
 	split.SetOffset(0.33) // sidebar gets 33% of width
 	content := container.NewBorder(nil, mainBtnBar, nil, nil, split)
 
 	w.SetContent(content)
 	w.ShowAndRun()
-}
-
-// Helper function
-// a function to clear label after specified time in seconds
-func clearLabelAfter(binding binding.String, d time.Duration) {
-	go func() {
-		time.Sleep(d)
-		_ = binding.Set("")
-	}()
 }
