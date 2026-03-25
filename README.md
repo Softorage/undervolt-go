@@ -272,9 +272,9 @@ To install **Undervolt Go** on your system, follow these steps:
 
    We may use AI when developing this project. If you find any issues, please report them to us. We will try to fix them as soon as possible.
 
-5. Which Intel CPUs are supported by Undervolt Go?
+5. Which Intel CPUs are supported by Undervolt Go? Does it support iGPU as well?
 
-   Undervolt Go supports a range of Intel CPUs, particularly those from the Haswell generation and newer. However, compatibility can vary based on your specific system configuration. 
+   Undervolt Go supports a range of Intel CPUs, particularly those from the Haswell generation and newer. However, compatibility can vary based on your specific system configuration. See the list from `undervolt by georgewhewell` [here](https://github.com/georgewhewell/undervolt#hardware-support). This tool may or may not work with iGPU though. See [this](https://github.com/georgewhewell/undervolt/issues/196).
 
 ## Contributors
 
