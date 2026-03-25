@@ -44,4 +44,4 @@ else
   echo "No icon.png found in the current directory. Skipping icon update."
 fi
 
-echo "Update complete! You can now use the updated application from terminal. Try 'sudo undervolt-go-pro'."
+echo "Update complete! You can now use the updated application from the terminal, applications menu or desktop. Try 'sudo undervolt-go-pro'."

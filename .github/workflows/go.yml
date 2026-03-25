@@ -38,11 +38,9 @@ jobs:
     # Extract the Git Version & Commit to define dynamic folder names
     - name: Set up Dynamic Folder Names
       run: |
-        GIT_TAG=$(git describe --tags --always)
-        GIT_COMMIT=$(git rev-parse --short HEAD)
         # Save to GITHUB_ENV so subsequent steps can use these variables
-        echo "BUILD_DIR=latest-build-${GIT_TAG}-${GIT_COMMIT}" >> $GITHUB_ENV
-        echo "PRO_BUILD_DIR=latest-pro-build-${GIT_TAG}-${GIT_COMMIT}" >> $GITHUB_ENV
+        echo "GIT_TAG=$(git describe --tags --always)" >> $GITHUB_ENV
+        echo "GIT_TAG_COMMIT=$(git describe --tags --always)-$(git rev-parse --short HEAD)" >> $GITHUB_ENV
     - name: Prepare dependencies
       run: |
         sudo apt-get update
@@ -62,21 +60,21 @@ jobs:
     - name: Make compiled binary available
       run: |
         echo "Working on making the compiled binary available..."
-        mkdir "${{ env.BUILD_DIR }}" "${{ env.PRO_BUILD_DIR }}" public
-        cp -r ./undervolt-go "./${{ env.BUILD_DIR }}/" # Copy the binary to the latest-build directory
-        cp -r ./undervolt-go-pro "./${{ env.PRO_BUILD_DIR }}/" # Copy the binary to the latest-pro-build directory
-        cp -r ./dist/script/cli/* "./${{ env.BUILD_DIR }}/" # Copy the install scripts to the latest-build directory
-        cp -r ./dist/script/gui/* "./${{ env.PRO_BUILD_DIR }}/" # Copy the install scripts to the latest-pro-build directory
+        mkdir "undervolt-go-${{ env.GIT_TAG_COMMIT }}" "undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}" public
+        cp -r ./undervolt-go "./undervolt-go-${{ env.GIT_TAG_COMMIT }}/" # Copy the binary to the undervolt-go directory
+        cp -r ./undervolt-go-pro "./undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}/" # Copy the binary to the undervolt-go-pro directory
+        cp -r ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG }-${{ env.GIT_COMMIT }}}/" # Copy the install scripts to the undervolt-go directory
+        cp -r ./dist/script/gui/* "./undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}/" # Copy the install scripts to the undervolt-go-pro directory
         echo "Ready to deploy!"
     - name: Compress the builds and make them available in 'public'
       run: |
-        zip -r undervolt-go.zip "./${{ env.BUILD_DIR }}/" # Make a zip file of the latest build
-        zip -r undervolt-go-pro.zip "./${{ env.PRO_BUILD_DIR }}/" # Make a zip file of the latest-pro build
-        cp -r undervolt-go.zip ./public/
-        cp -r undervolt-go-pro.zip ./public/
+        zip -r undervolt-go-${{ env.GIT_TAG }}.zip "./undervolt-go-${{ env.GIT_TAG_COMMIT }}/" # Make a zip file of the latest build
+        zip -r undervolt-go-pro-${{ env.GIT_TAG }}.zip "./undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}/" # Make a zip file of the latest-pro build
+        cp -r undervolt-go-${{ env.GIT_TAG }}.zip ./public/
+        cp -r undervolt-go-pro-${{ env.GIT_TAG }}.zip ./public/
         echo "Compress complete and available in public directory!"
         echo "Removing the now unused directories and archives..."
-        rm -r undervolt-go.zip undervolt-go-pro.zip "${{ env.BUILD_DIR }}" "${{ env.PRO_BUILD_DIR }}"
+        rm -r undervolt-go-${{ env.GIT_TAG }}.zip undervolt-go-pro-${{ env.GIT_TAG }}.zip "undervolt-go-${{ env.GIT_TAG_COMMIT }}" "undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}"
         echo "Removing complete!"
     - name: Output the files structure into a JSON file
       run: |

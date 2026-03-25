@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-echo "Installing Undervolt Go..."
+echo "Installing Undervolt Go Pro..."
 
 # Install binary
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
@@ -116,4 +116,4 @@ chmod +x "${USER_HOME}/Desktop/undervolt-go.desktop"
 chown "${USER_DESKTOP}:${USER_DESKTOP}" "${USER_HOME}/Desktop/undervolt-go.desktop"
 
 echo "Installation complete!"
-echo "You can now launch 'Undervolt Go' from the applications menu or desktop."
+echo "You can now launch 'Undervolt Go Pro' from the terminal, applications menu or desktop."
