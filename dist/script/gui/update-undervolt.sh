@@ -14,8 +14,9 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# Install binary to /usr/local/bin.
+# Define paths
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
+ICON_PATH="/usr/share/icons/undervolt-go.png"
 
 # Delete the existing binary if it exists.
 if [ -f "$INSTALL_PATH" ]; then
@@ -23,8 +24,24 @@ if [ -f "$INSTALL_PATH" ]; then
   rm -f "$INSTALL_PATH"
 fi
 
-echo "Installing undervolt-go to ${INSTALL_PATH}..."
+# Install the new binary
+echo "Installing undervolt-go-pro to ${INSTALL_PATH}..."
 cp undervolt-go-pro "${INSTALL_PATH}"
 chmod +x "${INSTALL_PATH}"
 
-echo "Update complete! You can now use updated 'undervolt-go' from terminal. Try 'undervolt-go -h'."
+# Update icon if present in the current directory
+if [[ -f "icon.png" ]]; then
+  # Delete the existing icon if it exists
+  if [ -f "$ICON_PATH" ]; then
+    echo "Deleting existing icon at $ICON_PATH..."
+    rm -f "$ICON_PATH"
+  fi
+  # Copy the new icon
+  echo "Installing new icon to ${ICON_PATH}..."
+  cp icon.png "${ICON_PATH}"
+  chmod 644 "${ICON_PATH}"
+else
+  echo "No icon.png found in the current directory. Skipping icon update."
+fi
+
+echo "Update complete! You can now use the updated application from terminal. Try 'sudo undervolt-go-pro'."

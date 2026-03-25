@@ -60,6 +60,7 @@ chmod +x "${WRAPPER_PATH}"
 ICON_PATH="/usr/share/icons/undervolt-go.png"
 if [[ -f "icon.png" ]]; then
   cp icon.png "${ICON_PATH}"
+  chmod 644 "${ICON_PATH}"
 else
   echo "No icon.png found. You can place your own icon at ${ICON_PATH} later."
 fi
