@@ -63,7 +63,7 @@ jobs:
         mkdir "undervolt-go-${{ env.GIT_TAG_COMMIT }}" "undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}" public
         cp -r ./undervolt-go "./undervolt-go-${{ env.GIT_TAG_COMMIT }}/" # Copy the binary to the undervolt-go directory
         cp -r ./undervolt-go-pro "./undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}/" # Copy the binary to the undervolt-go-pro directory
-        cp -r ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG }-${{ env.GIT_COMMIT }}}/" # Copy the install scripts to the undervolt-go directory
+        cp -r ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG_COMMIT }}/" # Copy the install scripts to the undervolt-go directory
         cp -r ./dist/script/gui/* "./undervolt-go-pro-${{ env.GIT_TAG_COMMIT }}/" # Copy the install scripts to the undervolt-go-pro directory
         echo "Ready to deploy!"
     - name: Compress the builds and make them available in 'public'
