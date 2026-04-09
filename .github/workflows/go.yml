@@ -5,7 +5,8 @@ name: Build and deploy undervolt-go
 
 on:
   push:
-    branches: [ "main" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
 
@@ -17,7 +18,7 @@ concurrency:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
+  contents: write   # necessary for releases
   pages: write      # to deploy to Pages
   id-token: write   # to verify the deployment originates from an appropriate source
 
