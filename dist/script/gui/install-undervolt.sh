@@ -57,7 +57,7 @@ EOF
 chmod +x "${WRAPPER_PATH}"
 
 # Install icon (optional: replace with your own icon)
-ICON_PATH="/usr/share/icons/undervolt-go.png"
+ICON_PATH="/usr/share/pixmaps/undervolt-go.png"
 if [[ -f "icon.png" ]]; then
   cp icon.png "${ICON_PATH}"
   chmod 644 "${ICON_PATH}"
@@ -103,6 +103,7 @@ Exec=pkexec ${WRAPPER_PATH}
 Icon=${ICON_PATH}
 Terminal=false
 Type=Application
+Keywords=undervolt;throttlestop;cpu;
 Categories=Utility;
 EOF
 

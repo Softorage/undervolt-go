@@ -15,7 +15,8 @@ echo "Uninstalling Undervolt Go..."
 # Define paths
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
 WRAPPER_PATH="/usr/bin/undervolt-go-wrapper"
-ICON_PATH="/usr/share/icons/undervolt-go.png"
+OLD_ICON_PATH="/usr/share/icons/undervolt-go.png"
+ICON_PATH="/usr/share/pixmaps/undervolt-go.png"
 POLKIT_FILE="/usr/share/polkit-1/actions/com.softorage.undervolt-go.policy"
 DESKTOP_FILE="/usr/share/applications/undervolt-go.desktop"
 
@@ -46,6 +47,11 @@ fi
 if [[ -f "${ICON_PATH}" ]]; then
   echo "Removing icon at ${ICON_PATH}..."
   rm -f "${ICON_PATH}"
+fi
+
+# Remove icon at old path
+if [[ -f "${OLD_ICON_PATH}" ]]; then
+  rm -f "${OLD_ICON_PATH}"
 fi
 
 # Remove PolicyKit file

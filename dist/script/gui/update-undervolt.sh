@@ -16,7 +16,8 @@ fi
 
 # Define paths
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
-ICON_PATH="/usr/share/icons/undervolt-go.png"
+OLD_ICON_PATH="/usr/share/icons/undervolt-go.png"
+ICON_PATH="/usr/share/pixmaps/undervolt-go.png"
 
 # Delete the existing binary if it exists.
 if [ -f "$INSTALL_PATH" ]; then
@@ -35,6 +36,10 @@ if [[ -f "icon.png" ]]; then
   if [ -f "$ICON_PATH" ]; then
     echo "Deleting existing icon at $ICON_PATH..."
     rm -f "$ICON_PATH"
+  fi
+  # Delete icon if any at old invalid path
+  if [ -f "$OLD_ICON_PATH" ]; then
+    rm -f "$OLD_ICON_PATH"
   fi
   # Copy the new icon
   echo "Installing new icon to ${ICON_PATH}..."

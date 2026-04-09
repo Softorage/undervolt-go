@@ -101,6 +101,7 @@ func runGUI() {
 	a := app.NewWithID("com.softorage.undervolt-go")
 	// Set dark theme
 	a.Settings().SetTheme(theme.DarkTheme())
+	a.SetIcon(resourceIconPng)
 	w := a.NewWindow("Undervolt Go")
 	w.Resize(fyne.NewSize(800, 600))
 
@@ -209,8 +210,8 @@ func runGUI() {
 	}
 
 	// Settings Inputs
-	persistCheck := widget.NewCheck("Persist the undervolt configuration on reboots", nil)
-	persistInfo := widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed.")
+	persistCheck := widget.NewCheck("Persist the current undervolt configuration across reboots.", nil)
+	persistInfo := widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed. You need to check and hit 'Apply' to persist the current values.")
 	persistInfo.Wrapping = fyne.TextWrapWord
 
 	// Profile Selects
@@ -649,7 +650,7 @@ func runGUI() {
 	secContainers["Status"] = outputSection
 
 	// Section container (only one visible at a time)
-	sectionContainer := container.NewMax()
+	sectionContainer := container.NewPadded(container.NewMax())
 	showSection := func(name string) {
 		sectionContainer.Objects = []fyne.CanvasObject{secContainers[name]}
 		sectionContainer.Refresh()
@@ -670,12 +671,12 @@ func runGUI() {
 	authorLink := widget.NewHyperlink("Softorage", siteURL)
 	authorLink.Alignment = fyne.TextAlignCenter
 	// the content for sidebar is consolidated in sidebarContent
-	sidebarContent := container.NewVBox(
+	sidebarContent := container.NewPadded(container.NewVBox(
 		append(sideBtns,
 			layout.NewSpacer(), // pushes link to bottom
 			container.NewHBox(layout.NewSpacer(), widget.NewLabel("by"), authorLink),
 		)...,
-	)
+	))
 	// the sidebar
 	sidebar := container.NewVScroll(sidebarContent)
 

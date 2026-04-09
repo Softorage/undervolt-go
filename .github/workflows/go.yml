@@ -49,12 +49,12 @@ jobs:
     - name: Build undervolt-go
       run: |
         echo "Building Undervolt Go..."
-        go build -ldflags="-X 'main.version=${{ env.GIT_TAG }}'" -o undervolt-go . # When building your application, pass the version from git tags using ldflags.
+        go build -ldflags="-X 'main.version=${{ env.GIT_TAG }}' -s -w" -o undervolt-go . # When building your application, pass the version from git tags using ldflags.
         echo "Build complete!"
     - name: Build Undervolt Go Pro
       run: |
         echo "Building Undervolt Go Pro..."
-        go build -tags gui -ldflags="-X 'main.version=${{ env.GIT_TAG }}'" -o undervolt-go-pro .
+        go build -tags gui -ldflags="-X 'main.version=${{ env.GIT_TAG }}' -s -w" -o undervolt-go-pro .
         echo "Build complete!"
     - name: Make compiled binary available
       run: |
@@ -67,13 +67,13 @@ jobs:
         echo "Ready to deploy!"
     - name: Compress the builds and make them available in 'public'
       run: |
-        zip -r undervolt-go-${{ env.GIT_TAG }}.zip "./undervolt-go-${{ env.GIT_TAG }}/" # Make a zip file of the latest build
-        zip -r undervolt-go-pro-${{ env.GIT_TAG }}.zip "./undervolt-go-pro-${{ env.GIT_TAG }}/" # Make a zip file of the latest-pro build
-        cp -r undervolt-go-${{ env.GIT_TAG }}.zip ./public/
-        cp -r undervolt-go-pro-${{ env.GIT_TAG }}.zip ./public/
+        tar -cJf "./public/undervolt-go-${{ env.GIT_TAG }}.tar.xz" -C "./undervolt-go-${{ env.GIT_TAG }}/" .
+        sha256sum "./public/undervolt-go-${{ env.GIT_TAG }}.tar.xz" > "./public/undervolt-go-${{ env.GIT_TAG }}.tar.xz.sha256"
+        tar -cJf "./public/undervolt-go-pro-${{ env.GIT_TAG }}.tar.xz" -C "./undervolt-go-pro-${{ env.GIT_TAG }}/" .
+        sha256sum "./public/undervolt-go-pro-${{ env.GIT_TAG }}.tar.xz" > "./public/undervolt-go-pro-${{ env.GIT_TAG }}.tar.xz.sha256"
         echo "Compress complete and available in public directory!"
-        echo "Removing the now unused directories and archives..."
-        rm -r undervolt-go-${{ env.GIT_TAG }}.zip undervolt-go-pro-${{ env.GIT_TAG }}.zip "undervolt-go-${{ env.GIT_TAG }}" "undervolt-go-pro-${{ env.GIT_TAG }}"
+        echo "Removing the now unused directories..."
+        rm -r "undervolt-go-${{ env.GIT_TAG }}" "undervolt-go-pro-${{ env.GIT_TAG }}"
         echo "Removing complete!"
     - name: Output the files structure into a JSON file
       run: |
@@ -91,6 +91,26 @@ jobs:
       with:
         # Upload entire repository
         path: './public'
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') # Only run for tags
+      with:
+        draft: true
+        body: >-
+          Thank you for using Undervolt Go!  
+            
+          **Installation:**  View [README](https://github.com/Softorage/undervolt-go?tab=readme-ov-file#installation) or visit [official website](https://softorage.github.io/undervolt-go/) for complete installation instructions.  
+            
+          Star this repo if you find this tool useful!  
+            
+          ---
+
+        generate_release_notes: true
+        files: |
+          public/*.tar.xz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
   # Deploy job
   deploy:

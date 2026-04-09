@@ -4,8 +4,15 @@
 
 Get it [here](https://softorage.github.io/undervolt-go/).
 
-_**Note:**_
+_**Note by dev:**_
 - *Please use this software with extreme caution. It has the potential to damage your computer if used incorrectly.*
+- The tool is tested by me for my personal use and works pretty nice. If you find any issues, please let me know via GitHub Issues.
+
+---
+
+Please leave a star if you find it useful!
+
+---
 
 ## Table of Contents
 
@@ -21,6 +28,9 @@ _**Note:**_
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 - [Contributors](#contributors)
+- [Credits](#credits)
+- [Other tools](#other-tools)
+- [What is Softorage?](#what-is-softorage)
 - [License](#license)
 
 ## Introduction
@@ -272,7 +282,11 @@ To install **Undervolt Go** on your system, follow these steps:
 
    We may use AI when developing this project. If you find any issues, please report them to us. We will try to fix them as soon as possible.
 
-5. Which Intel CPUs are supported by Undervolt Go? Does it support iGPU as well?
+5. Do you even know how to code?
+
+   Well, kind of. I am fairly confident that I understand the code I maintain (I keep forgetting though). Sometimes, there do appear parts of code (often via LLMs) that work and I don't quite understand how (and I have to ask to understand). But hey, that was the case even in StackOverflow days. I'm pretty dumb in that regard, just not enough to constantly keep messing the code. (-> Sanmay)
+
+6. Which Intel CPUs are supported by Undervolt Go? Does it support iGPU as well?
 
    Undervolt Go supports a range of Intel CPUs, particularly those from the Haswell generation and newer. However, compatibility can vary based on your specific system configuration. See the list from `undervolt by georgewhewell` [here](https://github.com/georgewhewell/undervolt#hardware-support). This tool may or may not work with iGPU though. See [this](https://github.com/georgewhewell/undervolt/issues/196).
 
@@ -284,6 +298,14 @@ We welcome contributions from the community. If you'd like to contribute to **Un
 
 * [undervolt](https://github.com/georgewhewell/undervolt) for Intel CPUs on Linux
 * [Softorage](https://softorage.com)
+
+## Other tools
+
+*Looking for a a simple 7-zip GUI on Linux that has all the advanced features that you are used to? Try our other tool: [7z-GUI-Linux](https://github.com/Softorage/7z-GUI-Linux).*
+
+## What is Softorage?
+
+Softorage is a software discovery platform with user privacy and safety as its main characteristics. It also allows you to get the software on your computer, but with a distinction. Instead of hosting the packages (which involves risks of package manipulation, and is a well known malware vector), it simply links you to the official developer's website. This helps ensure that you get the software package as the original developers intended.
 
 ## License
 
