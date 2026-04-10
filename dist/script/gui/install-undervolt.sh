@@ -107,14 +107,34 @@ Keywords=undervolt;throttlestop;cpu;
 Categories=Utility;
 EOF
 
-chmod +x "${DESKTOP_FILE}"
+chmod 644 "${DESKTOP_FILE}"
 
-# Copy to user's desktop
-USER_DESKTOP="${SUDO_USER:-$USER}"
-USER_HOME=$(eval echo "~${USER_DESKTOP}")
-cp "${DESKTOP_FILE}" "${USER_HOME}/Desktop/"
-chmod +x "${USER_HOME}/Desktop/undervolt-go.desktop"
-chown "${USER_DESKTOP}:${USER_DESKTOP}" "${USER_HOME}/Desktop/undervolt-go.desktop"
+REAL_USER="${SUDO_USER:-$USER}"
+USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+# Determine Desktop folder (handling internationalization)
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+    DESKTOP_FOLDER=$(sudo -u "$SUDO_USER" xdg-user-dir DESKTOP 2>/dev/null)
+else
+    DESKTOP_FOLDER=$(xdg-user-dir DESKTOP 2>/dev/null)
+fi
+# Fallback
+if [ -z "$DESKTOP_FOLDER" ]; then
+    DESKTOP_FOLDER="$USER_HOME/Desktop"
+fi
+
+# Get the .desktop on desktop
+if [ -d "$DESKTOP_FOLDER" ]; then
+    echo "Adding launcher to Desktop..."
+    # Copy the already-modified desktop file from APP_DIR to the Desktop
+    cp "${DESKTOP_FILE}" "$DESKTOP_FOLDER/"
+    # Desktop files on the actual desktop MUST be executable to be "trusted"
+    chmod +x "$DESKTOP_FOLDER/undervolt-go.desktop"
+    # If running as root (via sudo), make sure the user owns the desktop file
+    if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+        chown "$SUDO_USER:" "$DESKTOP_FOLDER/undervolt-go.desktop"
+    fi
+fi
 
 echo "Installation complete!"
 echo "You can now launch 'Undervolt Go Pro' from the terminal, applications menu or desktop."

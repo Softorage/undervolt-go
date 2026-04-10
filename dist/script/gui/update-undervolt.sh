@@ -18,6 +18,7 @@ fi
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
 OLD_ICON_PATH="/usr/share/icons/undervolt-go.png"
 ICON_PATH="/usr/share/pixmaps/undervolt-go.png"
+WRAPPER_PATH="/usr/bin/undervolt-go-wrapper"
 
 # Delete the existing binary if it exists.
 if [ -f "$INSTALL_PATH" ]; then
@@ -47,6 +48,52 @@ if [[ -f "icon.png" ]]; then
   chmod 644 "${ICON_PATH}"
 else
   echo "No icon.png found in the current directory. Skipping icon update."
+fi
+
+# Reinstall desktop file
+DESKTOP_FILE="/usr/share/applications/undervolt-go.desktop"
+rm -f "${DESKTOP_FILE}"
+
+echo "Creating desktop shortcut at ${DESKTOP_FILE}..."
+cat <<EOF > "${DESKTOP_FILE}"
+[Desktop Entry]
+Name=Undervolt Go
+Comment=Undervolt and tweak CPU power settings to reduce temperatures and improve performance
+Exec=pkexec ${WRAPPER_PATH}
+Icon=${ICON_PATH}
+Terminal=false
+Type=Application
+Keywords=undervolt;throttlestop;cpu;
+Categories=Utility;
+EOF
+
+chmod 644 "${DESKTOP_FILE}"
+
+REAL_USER="${SUDO_USER:-$USER}"
+USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+# Determine Desktop folder (handling internationalization)
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+    DESKTOP_FOLDER=$(sudo -u "$SUDO_USER" xdg-user-dir DESKTOP 2>/dev/null)
+else
+    DESKTOP_FOLDER=$(xdg-user-dir DESKTOP 2>/dev/null)
+fi
+# Fallback
+if [ -z "$DESKTOP_FOLDER" ]; then
+    DESKTOP_FOLDER="$USER_HOME/Desktop"
+fi
+
+# Get the .desktop on desktop
+if [ -d "$DESKTOP_FOLDER" ]; then
+    echo "Adding launcher to Desktop..."
+    # Copy the already-modified desktop file from APP_DIR to the Desktop
+    cp "${DESKTOP_FILE}" "$DESKTOP_FOLDER/"
+    # Desktop files on the actual desktop MUST be executable to be "trusted"
+    chmod +x "$DESKTOP_FOLDER/undervolt-go.desktop"
+    # If running as root (via sudo), make sure the user owns the desktop file
+    if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+        chown "$SUDO_USER:" "$DESKTOP_FOLDER/undervolt-go.desktop"
+    fi
 fi
 
 echo "Update complete! You can now use the updated application from the terminal, applications menu or desktop. Try 'sudo undervolt-go-pro'."
