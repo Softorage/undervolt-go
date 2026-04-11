@@ -23,33 +23,33 @@ echo "Creating pkexec wrapper at ${WRAPPER_PATH}..."
 cat <<EOF > "${WRAPPER_PATH}"
 #!/bin/bash
 # Determine the user who initiated the pkexec action
-if [ -n "$PKEXEC_UID" ]; then
-  USER=$(id -un "$PKEXEC_UID")
-elif [ -n "$SUDO_USER" ]; then
-  USER="$SUDO_USER"
+if [ -n "\$PKEXEC_UID" ]; then
+  USER=\$(id -un "\$PKEXEC_UID")
+elif [ -n "\$SUDO_USER" ]; then
+  USER="\$SUDO_USER"
 else
   echo "Error: Could not determine the user. PKEXEC_UID and SUDO_USER are unset." >&2
   exit 1
 fi
 # Check if the user was found
-if [ -z "$USER" ]; then
+if [ -z "\$USER" ]; then
   echo "Error: Could not determine the user." >&2
   exit 1
 fi
 # Get the user's home directory
-USER_HOME=$(eval echo "~${USER}")
+USER_HOME=\$(eval echo "~\${USER}")
 # Set up the display environment
-if [ -z "$DISPLAY" ]; then
+if [ -z "\$DISPLAY" ]; then
   export DISPLAY=:0  # Fallback to :0 if DISPLAY is not set
 fi
 # Set up Xauthority
-if [ -f "${USER_HOME}/.Xauthority" ]; then
-  export XAUTHORITY="${USER_HOME}/.Xauthority"
+if [ -f "\${USER_HOME}/.Xauthority" ]; then
+  export XAUTHORITY="\${USER_HOME}/.Xauthority"
 else
-  echo "Warning: .Xauthority file not found for user ${USER}." >&2
+  echo "Warning: .Xauthority file not found for user \${USER}." >&2
 fi
 # Debugging: Log environment variables
-echo "Launching undervolt-go-pro with DISPLAY=$DISPLAY, XAUTHORITY=$XAUTHORITY, USER=$USER" >&2
+echo "Launching undervolt-go-pro with DISPLAY=\$DISPLAY, XAUTHORITY=\$XAUTHORITY, USER=\$USER" >&2
 # Execute the binary
 exec ${INSTALL_PATH}
 EOF
