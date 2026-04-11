@@ -31,42 +31,84 @@
     </p>
     <hr>
     <small>Leave a star on GitHub if you like this project!</small>
-    <hr>
+  </header>
+  <hr>
+  <main>
     <p>
       To install <strong>Undervolt Go</strong> on your system, follow these steps:
     </p>
-    <ol type="1">
-      <li>Download latest release from below.
-        <ul>
-          <li>You can download the Graphical Interface version (Pro version) or the Command Line version.</li>
-          <li>The GUI version can also run the CLI commands. The commands need to be passed to <code>undervolt-go-pro</code>.</li>
+    <ol>
+      <li>Download latest release from below.<ul>
+          <li>You can download the Graphical Interface version (Pro version) or the CLI version.</li>
+          <li>The GUI version can also run the CLI commands. The commands need to be passed to <code>undervolt-go-pro</code>
+          </li>
         </ul>
       </li>
-      <li>Extract the archive. You should now have the following files:
-        <ol type="1">
-          <li>undervolt-go or undervolt-go-pro</li>
-          <li>install-undervolt.sh</li>
-          <li>uninstall-undervolt.sh</li>
-          <li>update-undervolt.sh</li>
-          <li>icon.png (in case of Pro version)</li>
+      <li>Extract the archive. You should now have the following files:<ol>
+          <li><code>undervolt-go</code> or <code>undervolt-go-pro</code></li>
+          <li><code>install-undervolt.sh</code></li>
+          <li><code>uninstall-undervolt.sh</code></li>
+          <li><code>update-undervolt.sh</code></li>
+          <li><code>icon.png</code> (in case of Pro version)</li>
         </ol>
       </li>
-      <li>Open Terminal and navigate to the directory containing the undervolt-go or undervolt-go-pro executable. You can often simply launch Terminal in the active folder with a right-click.</li>
-      <li>Simply make install-undervolt.sh executable (or update-undervolt.sh if you already have Undervolt Go installed on your system):
-        <ul>
-          <li><code>chmod +x install-undervolt.sh</code></li>
-          <li>or you can right click install-undervolt.sh, go to Properties, and in the Permissions tab, tick ‘Make executable’</li>
-        </ul>
+      <li>Open Terminal and navigate to the directory containing the undervolt-go or undervolt-go-pro executable. You can
+        often simply launch Terminal in the active folder with a right-click.</li>
+      <li>To install:<ol>
+          <li>Simply make <code>install-undervolt.sh</code> executable:<ul>
+              <li><code>chmod +x install-undervolt.sh</code></li>
+              <li>or you can right click <code>install-undervolt.sh</code>, go to Properties, and in the Permissions tab,
+                tick &#39;Make executable&#39;</li>
+            </ul>
+          </li>
+          <li>If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or
+            undervolt-go-pro for that matter)</li>
+          <li>Run <code>install-undervolt.sh</code> with sudo (it&#39;s always recommended to check the script by opening it
+            in a text editor before executing it)
+            <code>sudo ./install-undervolt.sh</code>
+          </li>
+        </ol>
       </li>
-      <li>If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for  that matter)</li>
-      <li>Run install-undervolt.sh (or update-undervolt.sh) with sudo (it’s always recommended to check the script by opening it in a text editor before executing it)
-        <ul>
-          <li><code>sudo ./install-undervolt.sh</code></li>
-        </ul>
+      <li>To update (if you already have Undervolt Go installed on your system):<ol>
+          <li>Simply make <code>update-undervolt.sh</code> executable:<ul>
+              <li><code>chmod +x update-undervolt.sh</code></li>
+              <li>or you can right click <code>update-undervolt.sh</code>, go to Properties, and in the Permissions tab,
+                tick &#39;Make executable&#39;</li>
+            </ul>
+          </li>
+          <li>If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or
+            undervolt-go-pro for that matter)</li>
+          <li>Run <code>update-undervolt.sh</code> with sudo (it&#39;s always recommended to check the script by opening it
+            in a text editor before executing it)
+            <code>sudo ./update-undervolt.sh</code>
+          </li>
+        </ol>
+      </li>
+      <li>To uninstall:<ol>
+          <li>Simply make <code>uninstall-undervolt.sh</code> executable:<ul>
+              <li><code>chmod +x uninstall-undervolt.sh</code></li>
+              <li>or you can right click <code>uninstall-undervolt.sh</code>, go to Properties, and in the Permissions tab,
+                tick &#39;Make executable&#39;</li>
+            </ul>
+          </li>
+          <li>If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or
+            undervolt-go-pro for that matter)</li>
+          <li>Run <code>uninstall-undervolt.sh</code> with sudo (it&#39;s always recommended to check the script by opening
+            it in a text editor before executing it)<ul>
+              <li>Completely uninstall, including configuration files, systemd services for persist and profile auto-swtich,
+                udev rule for profile auto-switch
+                <code>sudo ./uninstall-undervolt.sh</code>
+              </li>
+              <li>Keep configuration files, systemd services for persist and profile auto-swtich, udev rule for profile
+                auto-switch
+                <code>sudo ./uninstall-undervolt.sh --keepconfig --keeppersist --keepautoswitch</code>
+              </li>
+            </ul>
+          </li>
+        </ol>
       </li>
     </ol>
-  </header>
-  <main>
+    <hr>
     <div>Current directory:
       <!-- Breadcrumb navigation -->
       <nav id="breadcrumb" class="breadcrumb"></nav>
