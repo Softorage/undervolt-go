@@ -84,29 +84,29 @@ To build **Undervolt Go**, follow these steps:
    5. `icon.png` (in case of Pro version)
 3. Open Terminal and navigate to the directory containing the undervolt-go or undervolt-go-pro executable. You can often simply launch Terminal in the active folder with a right-click.
 4. To install:
-  1. Simply make `install-undervolt.sh` executable:
-    - `chmod +x install-undervolt.sh`
-    - or you can right click `install-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
-  2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
-  3. Run `install-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
-    `sudo ./install-undervolt.sh`
+   1. Simply make `install-undervolt.sh` executable:
+      - `chmod +x install-undervolt.sh`
+      - or you can right click `install-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
+   2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
+   3. Run `install-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
+      `sudo ./install-undervolt.sh`
 5. To update (if you already have Undervolt Go installed on your system):
-  1. Simply make `update-undervolt.sh` executable:
-    - `chmod +x update-undervolt.sh`
-    - or you can right click `update-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
-  2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
-  3. Run `update-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
-    `sudo ./update-undervolt.sh`
+   1. Simply make `update-undervolt.sh` executable:
+      - `chmod +x update-undervolt.sh`
+      - or you can right click `update-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
+   2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
+   3. Run `update-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
+      `sudo ./update-undervolt.sh`
 6. To uninstall:
-  1. Simply make `uninstall-undervolt.sh` executable:
-    - `chmod +x uninstall-undervolt.sh`
-    - or you can right click `uninstall-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
-  2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
-  3. Run `uninstall-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
-    - Completely uninstall, including configuration files, systemd services for persist and profile auto-swtich, udev rule for profile auto-switch
-       `sudo ./uninstall-undervolt.sh`
-    - Keep configuration files, systemd services for persist and profile auto-swtich, udev rule for profile auto-switch
-       `sudo ./uninstall-undervolt.sh --keepconfig --keeppersist --keepautoswitch`
+   1. Simply make `uninstall-undervolt.sh` executable:
+      - `chmod +x uninstall-undervolt.sh`
+      - or you can right click `uninstall-undervolt.sh`, go to Properties, and in the Permissions tab, tick 'Make executable'
+   2. If you have built the binary by yourselves, replace the downloaded undervolt-go with your undervolt-go (or undervolt-go-pro for that matter)
+   3. Run `uninstall-undervolt.sh` with sudo (it's always recommended to check the script by opening it in a text editor before executing it)
+      - Completely uninstall, including configuration files, systemd services for persist and profile auto-swtich, udev rule for profile auto-switch
+         `sudo ./uninstall-undervolt.sh`
+      - Keep configuration files, systemd services for persist and profile auto-swtich, udev rule for profile auto-switch
+         `sudo ./uninstall-undervolt.sh --keepconfig --keeppersist --keepautoswitch`
 
 ## Usage
 
@@ -138,7 +138,39 @@ To build **Undervolt Go**, follow these steps:
    sudo undervolt-go --core=-70 --cache=-50 --p1=40,32 --p2=60,10 --turbo=0 --temp=78 --temp-bat=66
    ```
 
-5. All commands can be found in the help menu:
+5. To persist a configuration across reboots.
+   
+   ```bash
+   sudo undervolt-go --core=-70 --cache=-50 --p1=40,32 --p2=60,10 --turbo=0 --temp=78 --temp-bat=66 --persist
+   ```
+
+6. To delete persisted configuration.
+  
+   ```bash
+   sudo undervolt-go --disable-persist
+   ```
+
+6. Auto-switching profile based on battery state (charging/discharging).
+   - Make sure that `ac` and `battery` profiles exist.
+  
+      ```bash
+      # save ac profile
+      sudo undervolt-go profile save ac --core=-50 --cache=-30 --p1=60,32 --p2=80,10 --turbo=0 --temp=84 --temp-bat=66
+      
+      # save battery profile
+      sudo undervolt-go profile save battery --core=-70 --cache=-50 --p1=15,32 --p2=40,10 --turbo=1 --temp=78 --temp-bat=66
+      ```
+   - Enable auto-switch:
+
+      ```bash
+      sudo undervolt-go profile auto-switch enable
+      ```
+   - Disable auto-switch:
+      ```bash
+      sudo undervolt-go profile disable
+      ```
+
+7. All commands can be found in the help menu:
 
    ```
    sudo undervolt-go --help
@@ -182,7 +214,7 @@ To build **Undervolt Go**, follow these steps:
 
    ```
 
-  6. Make sure to use `undervolt-go-pro` instead of `undervolt-go` in terminal in case you have installed the GUI version.
+8. Make sure to use `undervolt-go-pro` instead of `undervolt-go` in terminal in case you have installed the GUI version.
 
 ## Features
 

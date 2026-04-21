@@ -39,7 +39,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-echo "Uninstalling Undervolt Go..."
+echo "Uninstalling Undervolt Go Pro..."
 
 # Define paths
 INSTALL_PATH="/usr/local/bin/undervolt-go-pro"
@@ -63,6 +63,8 @@ systemctl stop undervolt-go.service undervolt-go-auto.service 2>/dev/null || tru
 if [[ -f "${INSTALL_PATH}" ]]; then
   echo "Removing binary at ${INSTALL_PATH}..."
   rm -f "${INSTALL_PATH}"
+else
+  echo "No installation found at ${INSTALL_PATH}."
 fi
 
 # Remove wrapper
