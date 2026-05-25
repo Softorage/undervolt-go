@@ -16,6 +16,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"image/color"
 	"os" // required for os.Stat ... may also be required if code for allowing notification for non-sudo user is uncommented
 	"os/exec"
 
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -83,7 +85,7 @@ type infoSelect struct {
 	showInfo func(string, time.Duration)
 }
 
-func newInfoSelect(options[]string, msg string, show func(string, time.Duration)) *infoSelect {
+func newInfoSelect(options []string, msg string, show func(string, time.Duration)) *infoSelect {
 	s := &infoSelect{infoMsg: msg, showInfo: show}
 	s.Options = options
 	s.ExtendBaseWidget(s)
@@ -95,6 +97,393 @@ func (s *infoSelect) Tapped(pe *fyne.PointEvent) {
 	if s.infoMsg != "" && s.showInfo != nil {
 		s.showInfo(s.infoMsg, 6*time.Second)
 	}
+}
+
+// Voltage Offset section
+func buildVoltageOffsetTab(w fyne.Window) fyne.CanvasObject {
+	voltOffsetCont := container.New(layout.NewFormLayout())
+	for _, p := range planes {
+		voltOffsetCont.Add(container.New(layout.NewHBoxLayout(), p.check, widget.NewLabel(p.name)))
+		voltOffsetCont.Add(p.entry)
+	}
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Voltage Offset"),
+			widget.NewSeparator(),
+			voltOffsetCont,
+		),
+	)
+}
+
+// Power Limit section
+func buildPowerLimitTab(w fyne.Window) fyne.CanvasObject {
+	plForm := container.New(layout.NewFormLayout(),
+		widget.NewLabel("P1 Power (W)"), p1Power,
+		widget.NewLabel("P1 Time (s)"), p1Time,
+		widget.NewLabel("P2 Power (W)"), p2Power,
+		widget.NewLabel("P2 Time (s)"), p2Time,
+	)
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Power Limit"),
+			widget.NewSeparator(),
+			plForm,
+		),
+	)
+}
+
+// Temperature Limits section
+func buildTempLimitTab(w fyne.Window) fyne.CanvasObject {
+	tempGrid := container.New(layout.NewFormLayout(),
+		widget.NewLabel("AC Temp (°C)"), tempEntry,
+		widget.NewLabel("Battery Temp (°C)"), tempBatEntry,
+	)
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Temperature Limit"),
+			widget.NewSeparator(),
+			tempGrid,
+		),
+	)
+}
+
+// Other Flags section
+func buildOtherFlagsTab(w fyne.Window) fyne.CanvasObject {
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Other Flags"),
+			widget.NewSeparator(),
+			forceCheck,
+			lockCheck,
+			verboseCheck,
+			container.NewHBox(),
+			container.New(layout.NewFormLayout(), widget.NewLabel("Turbo"), turboSelect),
+		),
+	)
+}
+
+// Profiles Section
+func buildProfilesTab(w fyne.Window) fyne.CanvasObject {
+
+	profileSaveBtn := widget.NewButton("Save Profile", func() {
+		name := profileSaveSelect.Selected
+		if name == "" {
+			showWarning("Please select a profile to save.", 3*time.Second)
+			return
+		}
+		args := collect()
+		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
+		if len(args) > 0 {
+			if err := run(flags...); err == nil {
+				showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
+			}
+		}
+	})
+
+	profileLoadBtn := widget.NewButton("Load Profile", func() {
+		name := profileLoadSelect.Selected
+		if name == "" {
+			showWarning("Please select a profile to load.", 3*time.Second)
+			return
+		}
+
+		// Kind of a duplication of code from main.go
+		actualName := name
+		if actualName == "Auto" {
+			if isBatteryDischarging() {
+				actualName = "Battery"
+			} else {
+				actualName = "AC"
+			}
+		}
+
+		// Reload config from disk to catch updated profiles
+		initConfig()
+
+		key := "profiles." + strings.ToLower(actualName)
+		if !viper.IsSet(key) {
+			showWarning(fmt.Sprintf("Profile '%s' not found.", actualName), 3*time.Second)
+			return
+		}
+
+		// Get the values from the profile
+		p := viper.Sub(key)
+		coreOffset := p.GetFloat64("planes.core")
+		gpuOffset := p.GetFloat64("planes.gpu")
+		cacheOffset := p.GetFloat64("planes.cache")
+		uncoreOffset := p.GetFloat64("planes.uncore")
+		analogioOffset := p.GetFloat64("planes.analogio")
+		tempFlag := p.GetInt("tl.temp")
+		tempBatFlag := p.GetInt("tl.temp-bat")
+		turboFlag := p.GetInt("turbo")
+		// we can use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
+		p1Args := p.GetIntSlice("pl.p1")
+		p2Args := p.GetIntSlice("pl.p2")
+		/* below code is useful if the values of p1 or p2 array float ... keep it
+		if raw := p.Get("pl.p1"); raw != nil {
+			if arr, ok := raw.([]any); ok && len(arr) == 2 {
+				p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+			}
+		}
+		if raw := p.Get("pl.p2"); raw != nil {
+			if arr, ok := raw.([]any); ok && len(arr) == 2 {
+				p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+			}
+		}
+		*/
+
+		// Update the values in the entry widgets
+		for _, p := range planes {
+			switch p.name {
+			case "Core":
+				p.entry.SetText(fmt.Sprintf("%f", coreOffset))
+			case "Cache":
+				p.entry.SetText(fmt.Sprintf("%f", cacheOffset))
+			case "GPU":
+				p.entry.SetText(fmt.Sprintf("%f", gpuOffset))
+			case "Uncore":
+				p.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
+			case "AnalogIO":
+				p.entry.SetText(fmt.Sprintf("%f", analogioOffset))
+			}
+		}
+		if len(p1Args) == 2 {
+			p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
+			p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
+		} else {
+			p1Power.SetText("")
+			p1Time.SetText("")
+		}
+		if len(p2Args) == 2 {
+			p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
+			p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
+		} else {
+			p2Power.SetText("")
+			p2Time.SetText("")
+		}
+
+		tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
+		tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
+
+		turboProfile := ""
+		for option, value := range turboOptions {
+			if value == strconv.Itoa(turboFlag) {
+				turboProfile = option
+				break
+			}
+		}
+		if turboProfile != "" {
+			turboSelect.SetSelected(turboProfile)
+		} else {
+			turboSelect.ClearSelected()
+		}
+
+		showWarning(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName), 3*time.Second)
+	})
+
+	// Helper to check if the auto-switch udev rule exists
+	isAutoSwitchEnabled := func() bool {
+		_, err := os.Stat("/etc/udev/rules.d/99-undervolt-go-auto.rules")
+		return err == nil
+	}
+
+	autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
+	autoSwitchLabel.Wrapping = fyne.TextWrapWord
+
+	autoSwitchBtn := widget.NewButton("", nil)
+	updateAutoSwitchBtn := func() {
+		if isAutoSwitchEnabled() {
+			autoSwitchBtn.SetText("Click to disable")
+		} else {
+			autoSwitchBtn.SetText("Click to enable")
+		}
+	}
+	updateAutoSwitchBtn() // Set initial text
+
+	autoSwitchBtn.OnTapped = func() {
+		initConfig() // Make sure we have the latest config state
+
+		if !isAutoSwitchEnabled() {
+			// Check if profiles exist before allowing it to be enabled
+			if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
+				showWarning("Both 'AC' and 'Battery' profiles must exist before enabling auto-profile switching.", 4*time.Second)
+				return
+			}
+
+			// Execute backend command
+			if err := run("profile", "auto-switch", "enable"); err == nil {
+				showWarning("Auto profile switching enabled.", 3*time.Second)
+			}
+		} else {
+			if err := run("profile", "auto-switch", "disable"); err == nil {
+				showWarning("Auto profile switching disabled.", 3*time.Second)
+			}
+		}
+		updateAutoSwitchBtn() // Update text after clicking
+	}
+
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Profiles"),
+			widget.NewSeparator(),
+			widget.NewLabel("Save current settings to a profile:"),
+			profileSaveSelect,
+			profileSaveBtn,
+			widget.NewLabel(""),
+			widget.NewLabel("Load settings from a profile:"),
+			profileLoadSelect,
+			profileLoadBtn,
+			widget.NewLabel(""),
+			widget.NewSeparator(),
+			autoSwitchLabel,
+			autoSwitchBtn,
+		),
+	)
+}
+
+// Settings section
+func buildSettingsTab(w fyne.Window) fyne.CanvasObject {
+	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
+		if err := run("--disable-persist"); err == nil {
+			showWarning("Persisted configuration cleared successfully.", 3*time.Second)
+		}
+	})
+	return container.NewPadded(
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## Settings"),
+			widget.NewSeparator(),
+			persistCheck,
+			persistInfo,
+			widget.NewLabel(""),
+			clearPersistBtn,
+		),
+	)
+}
+
+// Output section
+func buildStatusTab(w fyne.Window) fyne.CanvasObject {
+	// Monitoring state
+	// these let us start/stop a 1 Hz loop
+	var (
+		monitorTicker *time.Ticker
+		stopMonitor   chan struct{}
+	)
+
+	// startMonitor spins up a goroutine that every second runs `command`
+	// and dumps its stdout/stderr into outputLabel (including any errors).
+	startMonitor := func(command string) {
+		if monitorTicker != nil {
+			return // already running
+		}
+		stopMonitor = make(chan struct{})
+		monitorTicker = time.NewTicker(1 * time.Second)
+		// Pass channels into the goroutine as arguments so it holds steady references
+		// even if the outer variables are set to nil by the UI thread.
+		go func(stop chan struct{}, ticker *time.Ticker) {
+			for {
+				select {
+				case <-stop:
+					return
+				case <-ticker.C:
+					// run via shell so pipes/greps work
+					cmd := exec.Command("sh", "-c", command)
+					var buf bytes.Buffer
+					cmd.Stdout = &buf
+					cmd.Stderr = &buf
+					if err := cmd.Run(); err != nil {
+						buf.WriteString("\nError: " + err.Error())
+					}
+					text := buf.String()
+					// update UI on main thread safely
+					outputLabelBinding.Set(text)
+				}
+			}
+		}(stopMonitor, monitorTicker)
+	}
+
+	// stopMonitorFunc tells that goroutine to exit
+	stopMonitorFunc := func() {
+		if stopMonitor != nil {
+			close(stopMonitor) // Wakes up the blocking select statement
+			stopMonitor = nil
+		}
+		// Safely clear the ticker state purely on the main UI thread to avoid data races
+		if monitorTicker != nil {
+			monitorTicker.Stop()
+			monitorTicker = nil
+		}
+	}
+	// Buttons
+	readBtn := widget.NewButton("Read", func() {
+		if monitorTicker != nil {
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
+			return
+		}
+		_ = run("--read")
+	})
+	helpBtn := widget.NewButton("Help", func() {
+		if monitorTicker != nil {
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
+			return
+		}
+		_ = run("--help")
+	})
+	checkTempsBtn := widget.NewButton("Check Temps", func() {
+		if monitorTicker != nil {
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
+			return
+		}
+		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
+		startMonitor("sensors | grep Core")
+	})
+	checkFansBtn := widget.NewButton("Check Fans", func() {
+		if monitorTicker != nil {
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
+			return
+		}
+		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
+		startMonitor("sensors | grep -e cpu_fan -e gpu_fan")
+	})
+	stopBtn := widget.NewButton("Stop", func() {
+		if monitorTicker == nil {
+			showWarning("Nothing to stop there. You're good. :)", 3*time.Second)
+			return
+		}
+		stopMonitorFunc()
+		showWarning("Monitoring stopped. You may now run other commands.", 3*time.Second)
+	})
+	verBtn := widget.NewButton("Version", func() {
+		if monitorTicker != nil {
+			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
+			return
+		}
+		_ = run("--version")
+	})
+
+	btnBar := container.NewHBox(
+		checkTempsBtn, // lets separate the monitoring buttons into a new section named monitor. there user only has two buttons start and stop. star shows all the info, core temps, fans rpm, core freq, cpu utilization .... also we can have an information section which shows information about the cpu, ram, and stuff
+		checkFansBtn,
+		stopBtn,
+		layout.NewSpacer(),
+		readBtn,
+		helpBtn,
+		verBtn,
+	)
+	return container.NewPadded(
+		container.NewBorder(
+			// Top: the Output header
+			container.NewVBox(
+				widget.NewRichTextFromMarkdown("## Voltage Offset"),
+				widget.NewSeparator(),
+			),
+			// Bottom: buttons
+			btnBar,
+			// Left / Right: none
+			nil, nil,
+			// Center: let the VScroll fill all remaining space
+			outputLabel, // may need to wrap it in NewVScroll
+		),
+	)
 }
 
 func runGUI() {
@@ -138,7 +527,7 @@ func runGUI() {
 		entry   *infoEntry
 		check   *infoCheck
 	}
-	planes :=[]planeUI{
+	planes := []planeUI{
 		{"Core", "core", newInfoEntry("Voltage offset for Core plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for Core plane", showWarning)},
 		{"Cache", "cache", newInfoEntry("Voltage offset for Cache plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for Cache plane", showWarning)},
 		{"GPU", "gpu", newInfoEntry("Voltage offset for GPU plane (e.g., -50.000 mV)", showWarning), newInfoCheck("", "Enable undervolt for GPU plane", showWarning)},
@@ -282,403 +671,127 @@ func runGUI() {
 		return err
 	}
 
+	// Build Tab Contents
+	voltageOffsetTab := buildVoltageOffsetTab(w)
+	powerLimitTab := buildPowerLimitTab(w)
+	tempLimitTab := buildTempLimitTab(w)
+	otherFlagsTab := buildOtherFlagsTab(w)
+	profilesTab := buildProfilesTab(w)
+	settingsTab := buildSettingsTab(w)
+	statusTab := buildStatusTab(w)
+
+	// Create a Max container that will act as the dynamic main content area
+	contentArea := container.NewMax()
+
 	// Sections & Their Scrollable Content
 	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
-	sectionHeader := make(map[string]*widget.Label)
-	// Create section headers
-	for _, s := range secNames {
-		sectionHeader[s] = widget.NewLabelWithStyle(
-			s,
-			fyne.TextAlignLeading,
-			fyne.TextStyle{Bold: true},
-		)
-	}
-	// secContainers is a map of section names to their content containers.
-	// This map is used to store the content containers for each section,
-	// so that we can easily access them later.
-	secContainers := make(map[string]fyne.CanvasObject)
 
-	// Voltage Offset section
-	voltOffsetSection := container.NewVBox()
-	voltOffsetSection.Add(sectionHeader["Voltage Offset"])
-	voltOffsetCont := container.New(layout.NewFormLayout())
-	for _, p := range planes {
-		voltOffsetCont.Add(container.New(layout.NewHBoxLayout(), p.check, widget.NewLabel(p.name)))
-		voltOffsetCont.Add(p.entry)
-	}
-	voltOffsetSection.Add(voltOffsetCont)
-	secContainers["Voltage Offset"] = container.NewVScroll(voltOffsetSection)
-
-	// Power Limit section
-	plSection := container.NewVBox()
-	plSection.Add(sectionHeader["Power Limit"])
-	plForm := container.New(layout.NewFormLayout(),
-		widget.NewLabel("P1 Power (W)"), p1Power,
-		widget.NewLabel("P1 Time (s)"), p1Time,
-		widget.NewLabel("P2 Power (W)"), p2Power,
-		widget.NewLabel("P2 Time (s)"), p2Time,
+	tabs := widget.NewList(
+		func() int { return len(secNames) },
+		func() fyne.CanvasObject {
+			lbl := widget.NewLabel("")
+			lbl.TextStyle = fyne.TextStyle{Bold: true}
+			return container.NewPadded(lbl)
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			// Updating list elements safely
+			o.(*fyne.Container).Objects[0].(*widget.Label).SetText(secNames[i])
+		},
 	)
-	plSection.Add(plForm)
-	secContainers["Power Limit"] = container.NewVScroll(plSection)
 
-	// Temperature Limits section
-	tempSection := container.NewVBox()
-	tempSection.Add(sectionHeader["Temperature Limits"])
-	tempGrid := container.New(layout.NewFormLayout(),
-		widget.NewLabel("AC Temp (°C)"), tempEntry,
-		widget.NewLabel("Battery Temp (°C)"), tempBatEntry,
+	// Handle switching tab views
+	tabs.OnSelected = func(id widget.ListItemID) {
+		// Swap out the objects inside the main content area
+		switch id {
+		case 0:
+			contentArea.Objects = []fyne.CanvasObject{voltageOffsetTab}
+		case 1:
+			contentArea.Objects = []fyne.CanvasObject{powerLimitTab}
+		case 2:
+			contentArea.Objects = []fyne.CanvasObject{tempLimitTab}
+		case 3:
+			contentArea.Objects = []fyne.CanvasObject{otherFlagsTab}
+		case 4:
+			contentArea.Objects = []fyne.CanvasObject{profilesTab}
+		case 5:
+			contentArea.Objects = []fyne.CanvasObject{settingsTab}
+		case 6:
+			contentArea.Objects = []fyne.CanvasObject{statusTab}
+		}
+		contentArea.Refresh()
+	}
+
+	// Construct Sidebar Elements
+	// Top: App Name and version
+	appLabel := widget.NewRichText(
+		&widget.TextSegment{
+			Text: "Undervolt Go",
+			Style: widget.RichTextStyle{
+				SizeName:  theme.SizeNameHeadingText,
+				TextStyle: fyne.TextStyle{Bold: true},
+				Alignment: fyne.TextAlignCenter,
+			},
+		},
+		&widget.TextSegment{
+			Text: fmt.Sprintf("\nversion %s", version),
+			Style: widget.RichTextStyle{
+				SizeName:  theme.SizeNameCaptionText,
+				ColorName: theme.ColorNamePlaceHolder,
+				Alignment: fyne.TextAlignCenter,
+			},
+		},
 	)
-	tempSection.Add(tempGrid)
-	secContainers["Temperature Limits"] = container.NewVScroll(tempSection)
 
-	// Other Flags section
-	otherFlagsSection := container.NewVBox(sectionHeader["Other Flags"], forceCheck, lockCheck, verboseCheck, container.NewHBox(), container.New(layout.NewFormLayout(), widget.NewLabel("Turbo"), turboSelect))
-	secContainers["Other Flags"] = container.NewVScroll(otherFlagsSection)
+	// Center the text using an HBox with spacers on both sides
+	centeredAppLabel := container.NewHBox(layout.NewSpacer(), appLabel, layout.NewSpacer())
 
-	// Profiles Section
-	profileSaveBtn := widget.NewButton("Save Profile", func() {
-		name := profileSaveSelect.Selected
-		if name == "" {
-			showWarning("Please select a profile to save.", 3*time.Second)
-			return
-		}
-		args := collect()
-		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
-		if len(args) > 0 {
-			if err := run(flags...); err == nil {
-				showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
-			}
-		}
-	})
-
-	profileLoadBtn := widget.NewButton("Load Profile", func() {
-		name := profileLoadSelect.Selected
-		if name == "" {
-			showWarning("Please select a profile to load.", 3*time.Second)
-			return
-		}
-
-		// Kind of a duplication of code from main.go
-		actualName := name
-		if actualName == "Auto" {
-			if isBatteryDischarging() {
-				actualName = "Battery"
-			} else {
-				actualName = "AC"
-			}
-		}
-
-		// Reload config from disk to catch updated profiles
-		initConfig()
-
-		key := "profiles." + strings.ToLower(actualName)
-		if !viper.IsSet(key) {
-			showWarning(fmt.Sprintf("Profile '%s' not found.", actualName), 3*time.Second)
-			return
-		}
-
-		// Get the values from the profile
-		p := viper.Sub(key)
-		coreOffset := p.GetFloat64("planes.core")
-		gpuOffset := p.GetFloat64("planes.gpu")
-		cacheOffset := p.GetFloat64("planes.cache")
-		uncoreOffset := p.GetFloat64("planes.uncore")
-		analogioOffset := p.GetFloat64("planes.analogio")
-		tempFlag := p.GetInt("tl.temp")
-		tempBatFlag := p.GetInt("tl.temp-bat")
-		turboFlag := p.GetInt("turbo")
-		// we can use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
-		p1Args := p.GetIntSlice("pl.p1")
-		p2Args := p.GetIntSlice("pl.p2")
-		/* below code is useful if the values of p1 or p2 array float ... keep it
-		   if raw := p.Get("pl.p1"); raw != nil {
-		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
-		       p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-		     }
-		   }
-		   if raw := p.Get("pl.p2"); raw != nil {
-		     if arr, ok := raw.([]any); ok && len(arr) == 2 {
-		       p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-		     }
-		   }
-		*/
-
-		// Update the values in the entry widgets
-		for _, p := range planes {
-			switch p.name {
-			case "Core":
-				p.entry.SetText(fmt.Sprintf("%f", coreOffset))
-			case "Cache":
-				p.entry.SetText(fmt.Sprintf("%f", cacheOffset))
-			case "GPU":
-				p.entry.SetText(fmt.Sprintf("%f", gpuOffset))
-			case "Uncore":
-				p.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
-			case "AnalogIO":
-				p.entry.SetText(fmt.Sprintf("%f", analogioOffset))
-			}
-		}
-		if len(p1Args) == 2 {
-			p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
-			p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
-		} else {
-			p1Power.SetText("")
-			p1Time.SetText("")
-		}
-		if len(p2Args) == 2 {
-			p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
-			p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
-		} else {
-			p2Power.SetText("")
-			p2Time.SetText("")
-		}
-
-		tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
-		tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
-
-		turboProfile := ""
-		for option, value := range turboOptions {
-			if value == strconv.Itoa(turboFlag) {
-				turboProfile = option
-				break
-			}
-		}
-		if turboProfile != "" {
-			turboSelect.SetSelected(turboProfile)
-		} else {
-			turboSelect.ClearSelected()
-		}
-
-		showWarning(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName), 3*time.Second)
-	})
-
-	// Helper to check if the auto-switch udev rule exists
-	isAutoSwitchEnabled := func() bool {
-		_, err := os.Stat("/etc/udev/rules.d/99-undervolt-go-auto.rules")
-		return err == nil
-	}
-
-	autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
-	autoSwitchLabel.Wrapping = fyne.TextWrapWord
-
-	autoSwitchBtn := widget.NewButton("", nil)
-	updateAutoSwitchBtn := func() {
-		if isAutoSwitchEnabled() {
-			autoSwitchBtn.SetText("Click to disable")
-		} else {
-			autoSwitchBtn.SetText("Click to enable")
-		}
-	}
-	updateAutoSwitchBtn() // Set initial text
-
-	autoSwitchBtn.OnTapped = func() {
-		initConfig() // Make sure we have the latest config state
-
-		if !isAutoSwitchEnabled() {
-			// Check if profiles exist before allowing it to be enabled
-			if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
-				showWarning("Both 'AC' and 'Battery' profiles must exist before enabling auto-profile switching.", 4*time.Second)
-				return
-			}
-
-			// Execute backend command
-			if err := run("profile", "auto-switch", "enable"); err == nil {
-				showWarning("Auto profile switching enabled.", 3*time.Second)
-			}
-		} else {
-			if err := run("profile", "auto-switch", "disable"); err == nil {
-				showWarning("Auto profile switching disabled.", 3*time.Second)
-			}
-		}
-		updateAutoSwitchBtn() // Update text after clicking
-	}
-
-	profilesSection := container.NewVBox(
-		sectionHeader["Profiles"],
-		widget.NewLabel("Save current settings to a profile:"),
-		profileSaveSelect,
-		profileSaveBtn,
+	sidebarTop := container.NewVBox(
+		container.NewPadded(centeredAppLabel),
 		widget.NewLabel(""),
-		widget.NewLabel("Load settings from a profile:"),
-		profileLoadSelect,
-		profileLoadBtn,
-		widget.NewLabel(""),
-		widget.NewSeparator(),
-		autoSwitchLabel,
-		autoSwitchBtn,
-	)
-	secContainers["Profiles"] = container.NewVScroll(profilesSection)
-
-	// Settings section
-	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
-		if err := run("--disable-persist"); err == nil {
-			showWarning("Persisted configuration cleared successfully.", 3*time.Second)
-		}
-	})
-
-	settingsSection := container.NewVBox(
-		sectionHeader["Settings"],
-		persistCheck,
-		persistInfo,
-		widget.NewLabel(""),
-		clearPersistBtn,
-	)
-	secContainers["Settings"] = container.NewVScroll(settingsSection)
-
-	// Output section
-	// Monitoring state
-	// these let us start/stop a 1 Hz loop
-	var (
-		monitorTicker *time.Ticker
-		stopMonitor   chan struct{}
 	)
 
-	// startMonitor spins up a goroutine that every second runs `command`
-	// and dumps its stdout/stderr into outputLabel (including any errors).
-	startMonitor := func(command string) {
-		if monitorTicker != nil {
-			return // already running
-		}
-		stopMonitor = make(chan struct{})
-		monitorTicker = time.NewTicker(1 * time.Second)
-		// Pass channels into the goroutine as arguments so it holds steady references
-		// even if the outer variables are set to nil by the UI thread.
-		go func(stop chan struct{}, ticker *time.Ticker) {
-			for {
-				select {
-				case <-stop:
-					return
-				case <-ticker.C:
-					// run via shell so pipes/greps work
-					cmd := exec.Command("sh", "-c", command)
-					var buf bytes.Buffer
-					cmd.Stdout = &buf
-					cmd.Stderr = &buf
-					if err := cmd.Run(); err != nil {
-						buf.WriteString("\nError: " + err.Error())
-					}
-					text := buf.String()
-					// update UI on main thread safely
-					outputLabelBinding.Set(text)
-				}
-			}
-		}(stopMonitor, monitorTicker)
-	}
+	// Bottom: Github URL, Sponsor URL & Version
+	sourceCodeURL, _ := url.Parse("https://github.com/Softorage/7z-GUI-Linux")
+	sponsorURL, _ := url.Parse("https://rzp.io/rzp/hY39lZGa")
 
-	// stopMonitorFunc tells that goroutine to exit
-	stopMonitorFunc := func() {
-		if stopMonitor != nil {
-			close(stopMonitor) // Wakes up the blocking select statement
-			stopMonitor = nil
-		}
-		// Safely clear the ticker state purely on the main UI thread to avoid data races
-		if monitorTicker != nil {
-			monitorTicker.Stop()
-			monitorTicker = nil
-		}
-	}
+	//sourceCodeBtn := widget.NewButtonWithIcon("View Source", resourceSourceCodeSvg, func() { a.OpenURL(sourceCodeURL) })
+	sourceCodeBtn := widget.NewButton("View Source", func() { a.OpenURL(sourceCodeURL) })
+	//sourceCodeBtn.IconPlacement = widget.ButtonIconLeadingText
+	sourceCodeBtn.Importance = widget.LowImportance
+	sourceCodeBtn.Alignment = widget.ButtonAlignLeading
 
-	// Buttons
-	readBtn := widget.NewButton("Read", func() {
-		if monitorTicker != nil {
-			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
-			return
-		}
-		_ = run("--read")
-	})
-	helpBtn := widget.NewButton("Help", func() {
-		if monitorTicker != nil {
-			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
-			return
-		}
-		_ = run("--help")
-	})
-	checkTempsBtn := widget.NewButton("Check Temps", func() {
-		if monitorTicker != nil {
-			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
-			return
-		}
-		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
-		startMonitor("sensors | grep Core")
-	})
-	checkFansBtn := widget.NewButton("Check Fans", func() {
-		if monitorTicker != nil {
-			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
-			return
-		}
-		showWarning("Please click 'Stop' before running any other command or closing the app.", 3*time.Second)
-		startMonitor("sensors | grep -e cpu_fan -e gpu_fan")
-	})
-	stopBtn := widget.NewButton("Stop", func() {
-		if monitorTicker == nil {
-			showWarning("Nothing to stop there. You're good. :)", 3*time.Second)
-			return
-		}
-		stopMonitorFunc()
-		showWarning("Monitoring stopped. You may now run other commands.", 3*time.Second)
-	})
-	verBtn := widget.NewButton("Version", func() {
-		if monitorTicker != nil {
-			showWarning("Please click 'Stop' before running this command.", 3*time.Second)
-			return
-		}
-		_ = run("--version")
-	})
+	sponsorBtn := widget.NewButton("Sponsor", func() { a.OpenURL(sponsorURL) })
+	sponsorBtn.Importance = widget.LowImportance
+	sponsorBtn.Alignment = widget.ButtonAlignLeading
 
-	btnBar := container.NewHBox(
-		checkTempsBtn, // lets separate the monitoring buttons into a new section named monitor. there user only has two buttons start and stop. star shows all the info, core temps, fans rpm, core freq, cpu utilization .... also we can have an information section which shows information about the cpu, ram, and stuff
-		checkFansBtn,
-		stopBtn,
-		layout.NewSpacer(),
-		readBtn,
-		helpBtn,
-		verBtn,
+	tabsBottom := container.NewVBox(
+		container.NewPadded(sourceCodeBtn),
+		container.NewPadded(sponsorBtn),
 	)
 
-	// OUTPUT SECTION
-	outputSection := container.NewBorder(
-		// Top: the Output header
-		sectionHeader["Status"],
-		// Bottom: warning + buttons
-		btnBar,
-		// Left / Right: none
-		nil, nil,
-		// Center: let the VScroll fill all remaining space
-		container.NewVScroll(outputLabel),
+	aboutText := widget.NewRichText(&widget.TextSegment{
+		Text: fmt.Sprintf("A Softorage Project"),
+		Style: widget.RichTextStyle{
+			SizeName:  theme.SizeNameCaptionText,
+			ColorName: theme.ColorNamePlaceHolder,
+		},
+	})
+
+	sidebarBottom := container.NewVBox(
+		tabsBottom,
+		container.NewCenter(aboutText),
 	)
 
-	secContainers["Status"] = outputSection
+	sidebarContent := container.NewBorder(sidebarTop, sidebarBottom, nil, nil, tabs)
 
-	// Section container (only one visible at a time)
-	sectionContainer := container.NewPadded(container.NewMax())
-	showSection := func(name string) {
-		sectionContainer.Objects = []fyne.CanvasObject{secContainers[name]}
-		sectionContainer.Refresh()
-	}
-	showSection(secNames[0]) // start on the first
-	sectionContent := container.NewBorder(
-		nil, outputWarning, nil, nil, sectionContainer,
-	)
+	// Create Sidebar Background
+	// A translucent gray (alpha=25) creates a subtle contrast for both Light and Dark themes.
+	sidebarBg := canvas.NewRectangle(color.NRGBA{R: 128, G: 128, B: 128, A: 25})
+	// Force a minimum width to make the sidebar cozier/wider (180px width)
+	sidebarBg.SetMinSize(fyne.NewSize(180, 0))
 
-	// Sidebar (33% width)
-	sideBtns := make([]fyne.CanvasObject, len(secNames))
-	for i, name := range secNames {
-		n := name
-		sideBtns[i] = widget.NewButton(n, func() { showSection(n) })
-	}
-	// Link to Website
-	siteURL, _ := url.Parse("https://softorage.com")
-	authorLink := widget.NewHyperlink("Softorage", siteURL)
-	authorLink.Alignment = fyne.TextAlignCenter
-	// the content for sidebar is consolidated in sidebarContent
-	sidebarContent := container.NewPadded(container.NewVBox(
-		append(sideBtns,
-			layout.NewSpacer(), // pushes link to bottom
-			container.NewHBox(layout.NewSpacer(), widget.NewLabel("by"), authorLink),
-		)...,
-	))
-	// the sidebar
-	sidebar := container.NewVScroll(sidebarContent)
+	// Combine the background color and the sidebar content
+	sidebar := container.NewMax(sidebarBg, sidebarContent)
 
 	// Action Buttons (docked bottom‑right)
 	settingsApplyBtn := widget.NewButton("Apply", func() {
@@ -689,14 +802,27 @@ func runGUI() {
 			}
 		}
 	})
-
 	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn)
 
-	// Combine: HSplit + Border for button bar
-	split := container.NewHSplit(sidebar, sectionContent)
-	split.SetOffset(0.33) // sidebar gets 33% of width
-	content := container.NewBorder(nil, mainBtnBar, nil, nil, split)
+	// Combine Sidebar (Left) and Main Content (Right)
+	mainLayout := container.NewBorder(
+		nil,
+		nil,
+		sidebar,
+		nil,
+		container.NewBorder(
+			nil,
+			container.NewVBox(widget.NewSeparator(), mainBtnBar, outputWarning),
+			nil,
+			nil,
+			contentArea,
+		),
+	)
 
-	w.SetContent(content)
+	// Layout Main Window
+	w.SetContent(mainLayout)
+
+	// Pre-select first tab
+	tabs.Select(0)
 	w.ShowAndRun()
 }
