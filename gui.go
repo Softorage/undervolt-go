@@ -826,7 +826,7 @@ func (g *AppGUI) buildStatusTab() fyne.CanvasObject {
 			),
 			btnBar,
 			nil, nil,
-			g.outputLabel,
+			container.NewVScroll(g.outputLabel),
 		),
 	)
 }
