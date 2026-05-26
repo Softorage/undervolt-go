@@ -30,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -124,12 +125,16 @@ type AppGUI struct {
 	// To make Fyne GUI app goroutine-safe and allow automatic widget updates (like outputLabel) from a background goroutine, use the data/binding package instead of directly calling SetText() on the label from another goroutine
 	outputLabelBinding binding.String
 	outputWarningBind  binding.String
+	outputLogBinding   binding.String
 	warningTimer       *time.Timer
 
 	// Output Label: Status tab output
 	// Output Warning: Bottom info bar
 	outputLabel   *widget.Label
 	outputWarning *widget.Label
+	outputLog     *widget.Label
+
+	outputLogPlaceholder string
 
 	// Core UI Elements
 	planes       []planeUI
@@ -163,11 +168,11 @@ type AppGUI struct {
 func runGUI() {
 	a := app.NewWithID("com.softorage.undervolt-go")
 	a.Settings().SetTheme(theme.DarkTheme())
-	
+
 	a.SetIcon(resourceIconPng)
 
 	w := a.NewWindow("Undervolt Go")
-	w.Resize(fyne.NewSize(800, 600))
+	w.Resize(fyne.NewSize(800, 700))
 
 	gui := &AppGUI{
 		app:    a,
@@ -195,6 +200,12 @@ func (g *AppGUI) initWidgets() {
 	g.outputWarning = widget.NewLabelWithData(g.outputWarningBind)
 	g.outputWarning.Wrapping = fyne.TextWrapWord
 
+	g.outputLogPlaceholder = "Useful information from the app."
+	g.outputLogBinding = binding.NewString()
+	g.outputLogBinding.Set(g.outputLogPlaceholder)
+	g.outputLog = widget.NewLabelWithData(g.outputLogBinding)
+	g.outputLog.Wrapping = fyne.TextWrapWord
+
 	// Planes
 	g.planes = []planeUI{
 		{"Core", "core", newInfoEntry("Voltage offset for Core plane (e.g., -50.000 mV)", g.showWarning), newInfoCheck("", "Enable undervolt for Core plane", g.showWarning)},
@@ -203,7 +214,7 @@ func (g *AppGUI) initWidgets() {
 		{"Uncore", "uncore", newInfoEntry("Voltage offset for Uncore plane (e.g., -50.000 mV)", g.showWarning), newInfoCheck("", "Enable undervolt for Uncore plane", g.showWarning)},
 		{"AnalogIO", "analogio", newInfoEntry("Voltage offset for AnalogIO plane (e.g., -50.000 mV)", g.showWarning), newInfoCheck("", "Enable undervolt for AnalogIO plane", g.showWarning)},
 	}
-	
+
 	floatValidator := func(s string) error {
 		if s == "" {
 			return nil
@@ -263,7 +274,19 @@ func (g *AppGUI) initWidgets() {
 	g.tempBatEntry.Validator = intValidator
 
 	// Settings
-	g.persistCheck = widget.NewCheck("Persist the current undervolt configuration across reboots.", nil)
+	g.persistCheck = widget.NewCheck(
+		"Persist the current undervolt configuration across reboots.",
+		func(checked bool) {
+			// We only want to show the dialog when the box is checked (true)
+			if checked {
+				dialog.ShowInformation(
+					"Persist and apply on startup",
+					"Persist allows you to apply the specified values everytime the computer starts up. When this is checked, pressing 'Apply' button enables Persist, saving current offsets or other values. 'Apply' does NOT apply the offsets or other values when this checkbox is checked.\n\nNOTE: Make sure the offsets and other values being persisted are stable.",
+					g.window,
+				)
+			}
+		},
+	)
 	g.persistInfo = widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed. You need to check and hit 'Apply' to persist the current values.")
 	g.persistInfo.Wrapping = fyne.TextWrapWord
 
@@ -276,6 +299,22 @@ func (g *AppGUI) initWidgets() {
 // HELPER METHODS
 // ---------------------------------------------------------------------
 
+func (g *AppGUI) appendToLog(msg string) {
+	current, _ := g.outputLogBinding.Get()
+	timestamp := time.Now().Format("15:04:05")
+
+	// Create the new entry with a timestamp
+	newEntry := fmt.Sprintf("[%s] %s", timestamp, msg)
+
+	// If the current text is just the default placeholder, replace it.
+	// Otherwise, append with a double newline for readability.
+	if current == "" || current == g.outputLogPlaceholder {
+		g.outputLogBinding.Set(newEntry)
+	} else {
+		g.outputLogBinding.Set(newEntry + "\n\n" + current)
+	}
+}
+
 // Centralized warning handler that prevents premature clearing of messages
 func (g *AppGUI) showWarning(msg string, duration time.Duration) {
 	g.outputWarningBind.Set(msg)
@@ -287,12 +326,14 @@ func (g *AppGUI) showWarning(msg string, duration time.Duration) {
 			g.outputWarningBind.Set("")
 		})
 	}
+	g.appendToLog(fmt.Sprintf("info: %s", msg))
 }
+
 // Collect flags from input elements and return as array
 func (g *AppGUI) collect() []string {
 	var args []string
 	var outputLabelAlertArray []string
-	
+
 	for _, p := range g.planes {
 		if p.check.Checked {
 			args = append(args, "--"+p.command+"="+p.entry.Text)
@@ -301,8 +342,10 @@ func (g *AppGUI) collect() []string {
 		}
 	}
 	if len(outputLabelAlertArray) > 0 {
-		g.outputLabelBinding.Set(strings.Join(outputLabelAlertArray, "\n"))
-		g.showWarning("Error occured when applying Voltage Offset settings. Please check 'Output' pane for more information.", 3*time.Second)
+		//g.outputLabelBinding.Set(strings.Join(outputLabelAlertArray, "\n"))
+		fullMsg := strings.Join(outputLabelAlertArray, "\n")
+		g.appendToLog(fullMsg)
+		g.showWarning("Error occured when applying Voltage Offset settings. Please check 'Log' pane for more information.", 3*time.Second)
 	}
 
 	if g.forceCheck.Checked {
@@ -325,9 +368,15 @@ func (g *AppGUI) collect() []string {
 	}
 	if g.p1Power.Text != "" && g.p1Time.Text != "" {
 		args = append(args, "--p1="+g.p1Power.Text+","+g.p1Time.Text)
+	} else if g.p1Power.Text == "" || g.p1Time.Text == "" {
+		//dialog.ShowError(fmt.Errorf("please specify both Power and Time for P1."), g.window)
+		//g.showWarning("Please specify both Power and Time for P1.", 3*time.Second) // should be a dialog and not showwarning
 	}
 	if g.p2Power.Text != "" && g.p2Time.Text != "" {
 		args = append(args, "--p2="+g.p2Power.Text+","+g.p2Time.Text)
+	} else if g.p2Power.Text == "" || g.p2Time.Text == "" {
+		//dialog.ShowError(fmt.Errorf("please specify both Power and Time for P2."), g.window)
+		//g.showWarning("Please specify both Power and Time for P2.", 3*time.Second) // should be a dialog and not showwarning
 	}
 	if g.persistCheck.Checked {
 		args = append(args, "--persist")
@@ -337,7 +386,7 @@ func (g *AppGUI) collect() []string {
 
 func (g *AppGUI) run(flags ...string) error {
 	cmd := exec.Command("sudo", append([]string{rootCmdUseString}, flags...)...)
-	// Redirect command output to a buffer for display in the Output Pane.
+	// Redirect command output to a buffer for display in the Log Pane.
 	// Redirect both stdout and stderr to the same buffer, so that any error
 	// messages are included in the output.
 	var buf bytes.Buffer
@@ -346,11 +395,14 @@ func (g *AppGUI) run(flags ...string) error {
 	err := cmd.Run()
 	if err != nil {
 		buf.WriteString("\nError: " + err.Error())
-		g.showWarning("Error occured when applying settings. Please check 'Output' pane for more information.", 3*time.Second)
+		//g.showWarning("Error occured when applying settings. Please check 'Log' pane for more information.", 3*time.Second)
+		dialog.ShowError(fmt.Errorf("error occured when applying settings. Please check 'Log' pane for more information."), g.window)
 	}
-	g.outputLabelBinding.Set(buf.String())
+	//g.outputLabelBinding.Set(buf.String())
+	g.appendToLog(buf.String())
 	return err
 }
+
 // startMonitor spins up a goroutine that every second runs `command`
 // and dumps its stdout/stderr into outputLabel (including any errors).
 func (g *AppGUI) startMonitor(command string) {
@@ -380,6 +432,7 @@ func (g *AppGUI) startMonitor(command string) {
 		}
 	}(g.stopMonitor, g.monitorTicker)
 }
+
 // stopMonitorFunc tells that goroutine to exit
 func (g *AppGUI) stopMonitorFunc() {
 	if g.stopMonitor != nil {
@@ -416,6 +469,7 @@ func (g *AppGUI) buildPowerLimitTab() fyne.CanvasObject {
 	plForm := container.New(layout.NewFormLayout(),
 		widget.NewLabel("P1 Power (W)"), g.p1Power,
 		widget.NewLabel("P1 Time (s)"), g.p1Time,
+		widget.NewLabel(""), widget.NewLabel(""),
 		widget.NewLabel("P2 Power (W)"), g.p2Power,
 		widget.NewLabel("P2 Time (s)"), g.p2Time,
 	)
@@ -465,13 +519,28 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 			g.showWarning("Please select a profile to save.", 3*time.Second)
 			return
 		}
-		args := g.collect()
-		flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
-		if len(args) > 0 {
-			if err := g.run(flags...); err == nil {
-				g.showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
-			}
-		}
+
+		dialog.ShowConfirm(
+			fmt.Sprintf("Save to profile: %s", name), // title
+			fmt.Sprintf("Saving the values specified to profile: %s. This will overwrite any existing values in the corresponding profile.\n\nNote: If you want to see the current values in the profile without losing the values that you have specified, open Undervolt Go as a new window and load the profile there.\n\nProceed?", name), // description
+			func(confirmed bool) { // function callback
+				if confirmed {
+					args := g.collect()
+					flags := append([]string{"profile", "save", strings.ToLower(name)}, args...)
+					if len(args) > 0 {
+						if err := g.run(flags...); err == nil {
+							g.showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
+						} else {
+							// Handle error if g.run fails
+							g.showWarning("Failed to save profile: "+err.Error(), 3*time.Second)
+						}
+					}
+				} else {
+					g.showWarning(fmt.Sprintf("Saving to 'profile: %s' cancelled by user", name), 3*time.Second)
+				}
+			},
+			g.window, // window
+		)
 	})
 
 	profileLoadBtn := widget.NewButton("Load Profile", func() {
@@ -491,91 +560,104 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 			}
 		}
 
-		// Reload config from disk to catch updated profiles
-		// initConfig is available in package main.go
-		initConfig()
+		//g.showWarning(fmt.Sprintf("Loading profile %s. This will overwrite any existing values that you may have specified in the fields. Proceed?", actualName), 3*time.Second)
 
-		key := "profiles." + strings.ToLower(actualName)
-		if !viper.IsSet(key) {
-			g.showWarning(fmt.Sprintf("Profile '%s' not found.", actualName), 3*time.Second)
-			return
-		}
+		dialog.ShowConfirm(
+			fmt.Sprintf("Load profile: %s", name), // title
+			fmt.Sprintf("Loading profile: %s. This will overwrite any existing values that you may have specified in the fields.\n\nProceed?", actualName), // description
+			func(confirmed bool) { // function callback
+				if confirmed {
+					// Reload config from disk to catch updated profiles
+					// initConfig is available in package main.go
+					initConfig()
 
-		// Get the values from the profile
-		p := viper.Sub(key)
-		coreOffset := p.GetFloat64("planes.core")
-		gpuOffset := p.GetFloat64("planes.gpu")
-		cacheOffset := p.GetFloat64("planes.cache")
-		uncoreOffset := p.GetFloat64("planes.uncore")
-		analogioOffset := p.GetFloat64("planes.analogio")
-		tempFlag := p.GetInt("tl.temp")
-		tempBatFlag := p.GetInt("tl.temp-bat")
-		turboFlag := p.GetInt("turbo")
-		// we use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
-		p1Args := p.GetIntSlice("pl.p1")
-		p2Args := p.GetIntSlice("pl.p2")
-		/* below code is useful if the values of p1 or p2 array float ... keep it
-		if raw := p.Get("pl.p1"); raw != nil {
-			if arr, ok := raw.([]any); ok && len(arr) == 2 {
-				p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-			}
-		}
-		if raw := p.Get("pl.p2"); raw != nil {
-			if arr, ok := raw.([]any); ok && len(arr) == 2 {
-				p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
-			}
-		}
-		*/
+					key := "profiles." + strings.ToLower(actualName)
+					if !viper.IsSet(key) {
+						g.showWarning(fmt.Sprintf("Profile '%s' not found.", actualName), 3*time.Second)
+						return
+					}
 
-		// Update the values in the entry widgets
-		for _, plane := range g.planes {
-			switch plane.name {
-			case "Core":
-				plane.entry.SetText(fmt.Sprintf("%f", coreOffset))
-			case "Cache":
-				plane.entry.SetText(fmt.Sprintf("%f", cacheOffset))
-			case "GPU":
-				plane.entry.SetText(fmt.Sprintf("%f", gpuOffset))
-			case "Uncore":
-				plane.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
-			case "AnalogIO":
-				plane.entry.SetText(fmt.Sprintf("%f", analogioOffset))
-			}
-		}
-		
-		if len(p1Args) == 2 {
-			g.p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
-			g.p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
-		} else {
-			g.p1Power.SetText("")
-			g.p1Time.SetText("")
-		}
-		
-		if len(p2Args) == 2 {
-			g.p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
-			g.p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
-		} else {
-			g.p2Power.SetText("")
-			g.p2Time.SetText("")
-		}
+					// Get the values from the profile
+					p := viper.Sub(key)
+					coreOffset := p.GetFloat64("planes.core")
+					gpuOffset := p.GetFloat64("planes.gpu")
+					cacheOffset := p.GetFloat64("planes.cache")
+					uncoreOffset := p.GetFloat64("planes.uncore")
+					analogioOffset := p.GetFloat64("planes.analogio")
+					tempFlag := p.GetInt("tl.temp")
+					tempBatFlag := p.GetInt("tl.temp-bat")
+					turboFlag := p.GetInt("turbo")
+					// we use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
+					p1Args := p.GetIntSlice("pl.p1")
+					p2Args := p.GetIntSlice("pl.p2")
+					/* below code is useful if the values of p1 or p2 array float ... keep it
+					if raw := p.Get("pl.p1"); raw != nil {
+						if arr, ok := raw.([]any); ok && len(arr) == 2 {
+							p1Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+						}
+					}
+					if raw := p.Get("pl.p2"); raw != nil {
+						if arr, ok := raw.([]any); ok && len(arr) == 2 {
+							p2Args = []string{fmt.Sprint(arr[0]), fmt.Sprint(arr[1])}
+						}
+					}
+					*/
 
-		g.tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
-		g.tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
+					// Update the values in the entry widgets
+					for _, plane := range g.planes {
+						switch plane.name {
+						case "Core":
+							plane.entry.SetText(fmt.Sprintf("%f", coreOffset))
+						case "Cache":
+							plane.entry.SetText(fmt.Sprintf("%f", cacheOffset))
+						case "GPU":
+							plane.entry.SetText(fmt.Sprintf("%f", gpuOffset))
+						case "Uncore":
+							plane.entry.SetText(fmt.Sprintf("%f", uncoreOffset))
+						case "AnalogIO":
+							plane.entry.SetText(fmt.Sprintf("%f", analogioOffset))
+						}
+					}
 
-		turboProfile := ""
-		for option, value := range g.turboOptions {
-			if value == strconv.Itoa(turboFlag) {
-				turboProfile = option
-				break
-			}
-		}
-		if turboProfile != "" {
-			g.turboSelect.SetSelected(turboProfile)
-		} else {
-			g.turboSelect.ClearSelected()
-		}
+					if len(p1Args) == 2 {
+						g.p1Power.SetText(fmt.Sprintf("%d", p1Args[0]))
+						g.p1Time.SetText(fmt.Sprintf("%d", p1Args[1]))
+					} else {
+						g.p1Power.SetText("")
+						g.p1Time.SetText("")
+					}
 
-		g.showWarning(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName), 3*time.Second)
+					if len(p2Args) == 2 {
+						g.p2Power.SetText(fmt.Sprintf("%d", p2Args[0]))
+						g.p2Time.SetText(fmt.Sprintf("%d", p2Args[1]))
+					} else {
+						g.p2Power.SetText("")
+						g.p2Time.SetText("")
+					}
+
+					g.tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
+					g.tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
+
+					turboProfile := ""
+					for option, value := range g.turboOptions {
+						if value == strconv.Itoa(turboFlag) {
+							turboProfile = option
+							break
+						}
+					}
+					if turboProfile != "" {
+						g.turboSelect.SetSelected(turboProfile)
+					} else {
+						g.turboSelect.ClearSelected()
+					}
+
+					g.showWarning(fmt.Sprintf("Profile '%s' loaded into the UI.", actualName), 3*time.Second)
+				} else {
+					g.showWarning(fmt.Sprintf("Loading 'profile: %s' cancelled by user", actualName), 3*time.Second)
+				}
+			},
+			g.window, // window
+		)
 	})
 
 	isAutoSwitchEnabled := func() bool {
@@ -583,38 +665,53 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 		return err == nil
 	}
 
-	autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
-	autoSwitchLabel.Wrapping = fyne.TextWrapWord
+	//autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
+	//autoSwitchLabel.Wrapping = fyne.TextWrapWord
 
 	autoSwitchBtn := widget.NewButton("", nil)
 	updateAutoSwitchBtn := func() {
 		if isAutoSwitchEnabled() {
-			autoSwitchBtn.SetText("Click to disable")
+			autoSwitchBtn.SetText("Click to disable auto-switching profiles")
 		} else {
-			autoSwitchBtn.SetText("Click to enable")
+			autoSwitchBtn.SetText("Click to enable auto-switching profiles")
 		}
 	}
 	updateAutoSwitchBtn()
 
 	autoSwitchBtn.OnTapped = func() {
-		// Make sure we have the latest config state
-		initConfig()
+		dialog.ShowConfirm(
+			"Enable auto-switching profiles", // title
+			"Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.\n\nProceed?", // description
+			func(confirmed bool) { // function callback
+				if confirmed {
+					// Make sure we have the latest config state
+					initConfig()
 
-		if !isAutoSwitchEnabled() {
-			// Check if profiles exist before allowing it to be enabled
-			if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
-				g.showWarning("Both 'AC' and 'Battery' profiles must exist before enabling auto-profile switching.", 4*time.Second)
-				return
-			}
-			if err := g.run("profile", "auto-switch", "enable"); err == nil {
-				g.showWarning("Auto profile switching enabled.", 3*time.Second)
-			}
-		} else {
-			if err := g.run("profile", "auto-switch", "disable"); err == nil {
-				g.showWarning("Auto profile switching disabled.", 3*time.Second)
-			}
-		}
-		updateAutoSwitchBtn()
+					if !isAutoSwitchEnabled() {
+						// Check if profiles exist before allowing it to be enabled
+						if !viper.IsSet("profiles.ac") || !viper.IsSet("profiles.battery") {
+							g.showWarning("Both 'AC' and 'Battery' profiles must exist before enabling auto-profile switching.", 4*time.Second)
+							return
+						}
+						if err := g.run("profile", "auto-switch", "enable"); err == nil {
+							g.showWarning("Auto profile switching enabled.", 3*time.Second)
+						} else {
+							g.showWarning("Could not enable auto profile switching: "+err.Error(), 3*time.Second)
+						}
+					} else {
+						if err := g.run("profile", "auto-switch", "disable"); err == nil {
+							g.showWarning("Auto profile switching disabled.", 3*time.Second)
+						} else {
+							g.showWarning("Could not disable auto profile switching: "+err.Error(), 3*time.Second)
+						}
+					}
+					updateAutoSwitchBtn()
+				} else {
+					g.showWarning("Auto-profile switching cancelled by user", 3*time.Second)
+				}
+			},
+			g.window, // window
+		)
 	}
 
 	return container.NewPadded(
@@ -630,7 +727,7 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 			profileLoadBtn,
 			widget.NewLabel(""),
 			widget.NewSeparator(),
-			autoSwitchLabel,
+			//autoSwitchLabel,
 			autoSwitchBtn,
 		),
 	)
@@ -638,9 +735,23 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 
 func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
 	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
-		if err := g.run("--disable-persist"); err == nil {
-			g.showWarning("Persisted configuration cleared successfully.", 3*time.Second)
-		}
+
+		dialog.ShowConfirm(
+			"Remove Persisted values", // title
+			"This will remove offsets and other values that are configured to persist across boot and automatically apply on startup.\n\nProceed?", // description
+			func(confirmed bool) { // function callback
+				if confirmed {
+					if err := g.run("--disable-persist"); err == nil {
+						g.showWarning("Persisted configuration cleared successfully.", 3*time.Second)
+					} else {
+						g.showWarning("Persisted configuration could not be cleared: "+err.Error(), 3*time.Second)
+					}
+				} else {
+					g.showWarning("Configuration persist cancelled by user.", 3*time.Second)
+				}
+			},
+			g.window, // window
+		)
 	})
 	return container.NewPadded(
 		container.NewVBox(
@@ -710,7 +821,7 @@ func (g *AppGUI) buildStatusTab() fyne.CanvasObject {
 		helpBtn,
 		verBtn,
 	)
-	
+
 	return container.NewPadded(
 		container.NewBorder(
 			container.NewVBox(
@@ -719,7 +830,21 @@ func (g *AppGUI) buildStatusTab() fyne.CanvasObject {
 			),
 			btnBar,
 			nil, nil,
-			g.outputLabel, 
+			g.outputLabel,
+		),
+	)
+}
+
+func (g *AppGUI) buildLogTab() fyne.CanvasObject {
+	return container.NewPadded(
+		container.NewBorder(
+			container.NewVBox(
+				widget.NewRichTextFromMarkdown("## Log"),
+				widget.NewSeparator(),
+			),
+			nil,
+			nil, nil,
+			container.NewVScroll(g.outputLog),
 		),
 	)
 }
@@ -736,11 +861,12 @@ func (g *AppGUI) buildLayout() {
 	profilesTab := g.buildProfilesTab()
 	settingsTab := g.buildSettingsTab()
 	statusTab := g.buildStatusTab()
+	logTab := g.buildLogTab()
 
 	// Create a Max container that will act as the dynamic main content area
 	contentArea := container.NewMax()
 
-	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status"}
+	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status", "Log"}
 
 	tabs := widget.NewList(
 		func() int { return len(secNames) },
@@ -771,6 +897,8 @@ func (g *AppGUI) buildLayout() {
 			contentArea.Objects = []fyne.CanvasObject{settingsTab}
 		case 6:
 			contentArea.Objects = []fyne.CanvasObject{statusTab}
+		case 7:
+			contentArea.Objects = []fyne.CanvasObject{logTab}
 		}
 		contentArea.Refresh()
 	}
@@ -840,8 +968,8 @@ func (g *AppGUI) buildLayout() {
 	// Create Sidebar Background
 	// A translucent gray (alpha=25) creates a subtle contrast for both Light and Dark themes.
 	sidebarBg := canvas.NewRectangle(color.NRGBA{R: 128, G: 128, B: 128, A: 25})
-	// Force a minimum width to make the sidebar cozier/wider (180px width)
-	sidebarBg.SetMinSize(fyne.NewSize(180, 0))
+	// Force a minimum width to make the sidebar cozier/wider (220px width)
+	sidebarBg.SetMinSize(fyne.NewSize(220, 0))
 	// Combine the background color and the sidebar content
 	sidebar := container.NewMax(sidebarBg, sidebarContent)
 
@@ -855,7 +983,7 @@ func (g *AppGUI) buildLayout() {
 			}
 		}
 	})
-	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn)
+	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn) //add persist options here
 
 	mainLayout := container.NewBorder(
 		nil,
@@ -863,7 +991,7 @@ func (g *AppGUI) buildLayout() {
 		sidebar,
 		nil,
 		container.NewBorder(
-			nil,
+			nil, //profilebar
 			container.NewVBox(widget.NewSeparator(), mainBtnBar, g.outputWarning),
 			nil,
 			nil,
