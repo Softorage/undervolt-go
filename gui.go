@@ -288,7 +288,7 @@ func (g *AppGUI) showWarning(msg string, duration time.Duration) {
 		})
 	}
 }
-// Collect flags from input elements and return
+// Collect flags from input elements and return as array
 func (g *AppGUI) collect() []string {
 	var args []string
 	var outputLabelAlertArray []string
@@ -424,6 +424,8 @@ func (g *AppGUI) buildPowerLimitTab() fyne.CanvasObject {
 			widget.NewRichTextFromMarkdown("## Power Limit"),
 			widget.NewSeparator(),
 			plForm,
+			widget.NewLabel(""),
+			widget.NewLabel("Both Power and Time need to be specified for either P1 or P2."),
 		),
 	)
 }
@@ -802,7 +804,7 @@ func (g *AppGUI) buildLayout() {
 	)
 
 	// Bottom: Github URL, Sponsor URL & Version
-	sourceCodeURL, _ := url.Parse("https://github.com/Softorage/7z-GUI-Linux")
+	sourceCodeURL, _ := url.Parse("https://github.com/Softorage/undervolt-go")
 	sponsorURL, _ := url.Parse("https://rzp.io/rzp/hY39lZGa")
 
 	//sourceCodeBtn := widget.NewButtonWithIcon("View Source", resourceSourceCodeSvg, func() { a.OpenURL(sourceCodeURL) })
