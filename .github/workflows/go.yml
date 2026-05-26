@@ -9,6 +9,7 @@ on:
       - 'v*'
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch: # 
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
@@ -24,8 +25,32 @@ permissions:
   attestations: write
 
 jobs:
+  # run the job only for the latest tag
+  checker:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            # If it's a tag push, check if it's the latest version tag
+            LATEST=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+            if [ "$GITHUB_REF_NAME" = "$LATEST" ]; then
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            fi
+          fi
   # Build job
   build:
+    needs: checker
+    if: needs.checker.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -45,7 +70,7 @@ jobs:
     - name: Prepare dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
+        sudo apt-get install -y build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
         go mod tidy # Ensures all required dependencies are installed
         echo "All required dependencies are installed"
     - name: Build undervolt-go
@@ -61,11 +86,11 @@ jobs:
     - name: Make compiled binary available
       run: |
         echo "Working on making the compiled binary available..."
-        mkdir "undervolt-go-${{ env.GIT_TAG }}" "undervolt-go-pro-${{ env.GIT_TAG }}" public
+        mkdir -p "undervolt-go-${{ env.GIT_TAG }}" "undervolt-go-pro-${{ env.GIT_TAG }}" public
         cp -r ./undervolt-go "./undervolt-go-${{ env.GIT_TAG }}/" # Copy the binary to the undervolt-go directory
         cp -r ./undervolt-go-pro "./undervolt-go-pro-${{ env.GIT_TAG }}/" # Copy the binary to the undervolt-go-pro directory
-        cp -r ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG }}/" # Copy the install scripts to the undervolt-go directory
-        cp -r ./dist/script/gui/* "./undervolt-go-pro-${{ env.GIT_TAG }}/" # Copy the install scripts to the undervolt-go-pro directory
+        cp -rf ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG }}/" || true # Copy the install scripts to the undervolt-go directory
+        cp -rf ./dist/script/gui/* "./undervolt-go-pro-${{ env.GIT_TAG }}/" || true # Copy the install scripts to the undervolt-go-pro directory
         echo "Ready to deploy!"
     - name: Compress the builds and make them available in 'public'
       run: |

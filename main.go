@@ -857,7 +857,7 @@ func migrateConfigIfNeeded() error {
 	if err := os.Remove(oldPath); err != nil {
 		log.Printf("Warning: Migrated config to /etc/, but failed to delete old config: %v", err)
 	}
-	
+
 	// Attempt to remove the old directory if it's empty
 	_ = os.Remove(oldConfigDir())
 
