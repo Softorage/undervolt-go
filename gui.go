@@ -290,7 +290,7 @@ func (g *AppGUI) initWidgets() {
 	g.persistInfo = widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed. You need to check and hit 'Apply' to persist the current values.")
 	g.persistInfo.Wrapping = fyne.TextWrapWord
 
-	// 7. Profiles
+	// Profiles
 	g.profileSaveSelect = widget.NewSelect([]string{"AC", "Battery"}, nil)
 	g.profileLoadSelect = widget.NewSelect([]string{"Auto", "AC", "Battery"}, nil)
 }
@@ -342,7 +342,6 @@ func (g *AppGUI) collect() []string {
 		}
 	}
 	if len(outputLabelAlertArray) > 0 {
-		//g.outputLabelBinding.Set(strings.Join(outputLabelAlertArray, "\n"))
 		fullMsg := strings.Join(outputLabelAlertArray, "\n")
 		g.appendToLog(fullMsg)
 		g.showWarning("Error occured when applying Voltage Offset settings. Please check 'Log' pane for more information.", 3*time.Second)
@@ -369,14 +368,12 @@ func (g *AppGUI) collect() []string {
 	if g.p1Power.Text != "" && g.p1Time.Text != "" {
 		args = append(args, "--p1="+g.p1Power.Text+","+g.p1Time.Text)
 	} else if g.p1Power.Text == "" || g.p1Time.Text == "" {
-		//dialog.ShowError(fmt.Errorf("please specify both Power and Time for P1."), g.window)
-		//g.showWarning("Please specify both Power and Time for P1.", 3*time.Second) // should be a dialog and not showwarning
+		g.appendToLog("Please specify both Power and Time for P1.")
 	}
 	if g.p2Power.Text != "" && g.p2Time.Text != "" {
 		args = append(args, "--p2="+g.p2Power.Text+","+g.p2Time.Text)
 	} else if g.p2Power.Text == "" || g.p2Time.Text == "" {
-		//dialog.ShowError(fmt.Errorf("please specify both Power and Time for P2."), g.window)
-		//g.showWarning("Please specify both Power and Time for P2.", 3*time.Second) // should be a dialog and not showwarning
+		g.appendToLog("Please specify both Power and Time for P2.")
 	}
 	if g.persistCheck.Checked {
 		args = append(args, "--persist")
@@ -395,10 +392,8 @@ func (g *AppGUI) run(flags ...string) error {
 	err := cmd.Run()
 	if err != nil {
 		buf.WriteString("\nError: " + err.Error())
-		//g.showWarning("Error occured when applying settings. Please check 'Log' pane for more information.", 3*time.Second)
 		dialog.ShowError(fmt.Errorf("error occured when applying settings. Please check 'Log' pane for more information."), g.window)
 	}
-	//g.outputLabelBinding.Set(buf.String())
 	g.appendToLog(buf.String())
 	return err
 }
@@ -560,12 +555,10 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 			}
 		}
 
-		//g.showWarning(fmt.Sprintf("Loading profile %s. This will overwrite any existing values that you may have specified in the fields. Proceed?", actualName), 3*time.Second)
-
 		dialog.ShowConfirm(
-			fmt.Sprintf("Load profile: %s", name), // title
-			fmt.Sprintf("Loading profile: %s. This will overwrite any existing values that you may have specified in the fields.\n\nProceed?", actualName), // description
-			func(confirmed bool) { // function callback
+			fmt.Sprintf("Load profile: %s", name),
+			fmt.Sprintf("Loading profile: %s. This will overwrite any existing values that you may have specified in the fields.\n\nProceed?", actualName),
+			func(confirmed bool) {
 				if confirmed {
 					// Reload config from disk to catch updated profiles
 					// initConfig is available in package main.go
@@ -656,7 +649,7 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 					g.showWarning(fmt.Sprintf("Loading 'profile: %s' cancelled by user", actualName), 3*time.Second)
 				}
 			},
-			g.window, // window
+			g.window,
 		)
 	})
 
@@ -664,9 +657,6 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 		_, err := os.Stat("/etc/udev/rules.d/99-undervolt-go-auto.rules")
 		return err == nil
 	}
-
-	//autoSwitchLabel := widget.NewLabel("Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.")
-	//autoSwitchLabel.Wrapping = fyne.TextWrapWord
 
 	autoSwitchBtn := widget.NewButton("", nil)
 	updateAutoSwitchBtn := func() {
@@ -680,9 +670,9 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 
 	autoSwitchBtn.OnTapped = func() {
 		dialog.ShowConfirm(
-			"Enable auto-switching profiles", // title
-			"Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.\n\nProceed?", // description
-			func(confirmed bool) { // function callback
+			"Enable auto-switching profiles",
+			"Enable automatic profile switching based on whether the battery is charging or discharging. Make sure that both AC and Battery profiles exist before enabling.\n\nProceed?",
+			func(confirmed bool) {
 				if confirmed {
 					// Make sure we have the latest config state
 					initConfig()
@@ -710,7 +700,7 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 					g.showWarning("Auto-profile switching cancelled by user", 3*time.Second)
 				}
 			},
-			g.window, // window
+			g.window,
 		)
 	}
 
@@ -727,7 +717,6 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 			profileLoadBtn,
 			widget.NewLabel(""),
 			widget.NewSeparator(),
-			//autoSwitchLabel,
 			autoSwitchBtn,
 		),
 	)
@@ -737,9 +726,9 @@ func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
 	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
 
 		dialog.ShowConfirm(
-			"Remove Persisted values", // title
-			"This will remove offsets and other values that are configured to persist across boot and automatically apply on startup.\n\nProceed?", // description
-			func(confirmed bool) { // function callback
+			"Remove Persisted values",
+			"This will remove offsets and other values that are configured to persist across boot and automatically apply on startup.\n\nProceed?",
+			func(confirmed bool) {
 				if confirmed {
 					if err := g.run("--disable-persist"); err == nil {
 						g.showWarning("Persisted configuration cleared successfully.", 3*time.Second)
@@ -750,7 +739,7 @@ func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
 					g.showWarning("Configuration persist cancelled by user.", 3*time.Second)
 				}
 			},
-			g.window, // window
+			g.window,
 		)
 	})
 	return container.NewPadded(
