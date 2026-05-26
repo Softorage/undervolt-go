@@ -150,7 +150,6 @@ type AppGUI struct {
 	turboSelect  *infoSelect
 	turboOptions map[string]string
 	persistCheck *widget.Check
-	persistInfo  *widget.Label
 
 	// Profile Selects
 	profileSaveSelect *widget.Select
@@ -281,14 +280,12 @@ func (g *AppGUI) initWidgets() {
 			if checked {
 				dialog.ShowInformation(
 					"Persist and apply on startup",
-					"Persist allows you to apply the specified values everytime the computer starts up. When this is checked, pressing 'Apply' button enables Persist, saving current offsets or other values. 'Apply' does NOT apply the offsets or other values when this checkbox is checked.\n\nNOTE: Make sure the offsets and other values being persisted are stable.",
+					"Persist allows you to apply the specified values everytime the computer starts up.\n\nWhen this is checked, pressing 'Apply' button:\n1. Enables Persist, saving current offsets or other values,\n2. Does NOT apply the offsets or other values.\n\nNOTE: Make sure the offsets and other values being persisted are stable.",
 					g.window,
 				)
 			}
 		},
 	)
-	g.persistInfo = widget.NewLabel("Make sure the configuration being persisted is indeed a stable one. Untick this checkbox when not needed. You need to check and hit 'Apply' to persist the current values.")
-	g.persistInfo.Wrapping = fyne.TextWrapWord
 
 	// Profiles
 	g.profileSaveSelect = widget.NewSelect([]string{"AC", "Battery"}, nil)
@@ -383,18 +380,29 @@ func (g *AppGUI) collect() []string {
 
 func (g *AppGUI) run(flags ...string) error {
 	cmd := exec.Command("sudo", append([]string{rootCmdUseString}, flags...)...)
-	// Redirect command output to a buffer for display in the Log Pane.
-	// Redirect both stdout and stderr to the same buffer, so that any error
-	// messages are included in the output.
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+
+	var outBuilder, errBuilder strings.Builder
+	cmd.Stdout = &outBuilder
+	cmd.Stderr = &errBuilder
+
+	// Run the command (blocks until complete)
+	g.showWarning("Running command... wait.", 3*time.Second)
 	err := cmd.Run()
-	if err != nil {
-		buf.WriteString("\nError: " + err.Error())
-		dialog.ShowError(fmt.Errorf("error occured when applying settings. Please check 'Log' pane for more information."), g.window)
+
+	// Show stdout in the label binding
+	g.outputLabelBinding.Set(outBuilder.String())
+
+	// Show stderr in the log (if there is any)
+	if errOutput := errBuilder.String(); errOutput != "" {
+		g.appendToLog("Stderr: " + errOutput)
 	}
-	g.appendToLog(buf.String())
+
+	// Handle execution errors (e.g., command not found, or non-zero exit status)
+	if err != nil {
+		g.appendToLog("Execution Error: " + err.Error())
+		dialog.ShowError(fmt.Errorf("Error occurred when applying settings. Please check 'Log' pane for more information."), g.window)
+	}
+
 	return err
 }
 
@@ -747,7 +755,6 @@ func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
 			widget.NewRichTextFromMarkdown("## Settings"),
 			widget.NewSeparator(),
 			g.persistCheck,
-			g.persistInfo,
 			widget.NewLabel(""),
 			clearPersistBtn,
 		),
