@@ -171,7 +171,7 @@ func runGUI() {
 	a.SetIcon(resourceIconPng)
 
 	w := a.NewWindow("Undervolt Go")
-	w.Resize(fyne.NewSize(800, 700))
+	w.Resize(fyne.NewSize(800, 650))
 
 	gui := &AppGUI{
 		app:    a,
@@ -204,6 +204,7 @@ func (g *AppGUI) initWidgets() {
 	g.outputLogBinding.Set(g.outputLogPlaceholder)
 	g.outputLog = widget.NewLabelWithData(g.outputLogBinding)
 	g.outputLog.Wrapping = fyne.TextWrapWord
+	g.outputLog.Selectable = true
 
 	// Planes
 	g.planes = []planeUI{
@@ -274,7 +275,7 @@ func (g *AppGUI) initWidgets() {
 
 	// Settings
 	g.persistCheck = widget.NewCheck(
-		"Persist the current undervolt configuration across reboots.",
+		"Persist",
 		func(checked bool) {
 			// We only want to show the dialog when the box is checked (true)
 			if checked {
@@ -295,6 +296,12 @@ func (g *AppGUI) initWidgets() {
 // ---------------------------------------------------------------------
 // HELPER METHODS
 // ---------------------------------------------------------------------
+
+func (g *AppGUI) newSmallSpace() *canvas.Rectangle {
+	space := canvas.NewRectangle(color.Transparent)
+	space.SetMinSize(fyne.NewSize(5, 5))
+	return space
+}
 
 func (g *AppGUI) appendToLog(msg string) {
 	current, _ := g.outputLogBinding.Get()
@@ -386,7 +393,7 @@ func (g *AppGUI) run(flags ...string) error {
 	cmd.Stderr = &errBuilder
 
 	// Run the command (blocks until complete)
-	g.showWarning("Running command... wait.", 3*time.Second)
+	g.showWarning(fmt.Sprintf("Please wait: Running undervolt-go-pro with flags:\n%s.", strings.Join(flags, " ")), 3*time.Second)
 	err := cmd.Run()
 
 	// Show stdout in the label binding
@@ -515,8 +522,8 @@ func (g *AppGUI) buildOtherFlagsTab() fyne.CanvasObject {
 	)
 }
 
-func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
-	profileSaveBtn := widget.NewButton("Save Profile", func() {
+func (g *AppGUI) buildProfilesBar() fyne.CanvasObject {
+	profileSaveBtn := widget.NewButton("Save", func() {
 		name := g.profileSaveSelect.Selected
 		if name == "" {
 			g.showWarning("Please select a profile to save.", 3*time.Second)
@@ -546,7 +553,7 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 		)
 	})
 
-	profileLoadBtn := widget.NewButton("Load Profile", func() {
+	profileLoadBtn := widget.NewButton("Load", func() {
 		name := g.profileLoadSelect.Selected
 		if name == "" {
 			g.showWarning("Please select a profile to load.", 3*time.Second)
@@ -669,9 +676,9 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 	autoSwitchBtn := widget.NewButton("", nil)
 	updateAutoSwitchBtn := func() {
 		if isAutoSwitchEnabled() {
-			autoSwitchBtn.SetText("Click to disable auto-switching profiles")
+			autoSwitchBtn.SetText("Disable auto-switch")
 		} else {
-			autoSwitchBtn.SetText("Click to enable auto-switching profiles")
+			autoSwitchBtn.SetText("Enable auto-switch")
 		}
 	}
 	updateAutoSwitchBtn()
@@ -713,25 +720,23 @@ func (g *AppGUI) buildProfilesTab() fyne.CanvasObject {
 	}
 
 	return container.NewPadded(
-		container.NewVBox(
-			widget.NewRichTextFromMarkdown("## Profiles"),
-			widget.NewSeparator(),
-			widget.NewLabel("Save current settings to a profile:"),
+		container.NewHBox(
+			widget.NewRichTextFromMarkdown("### Profiles"),
+			widget.NewLabel(""),
+			widget.NewLabel(""),
 			g.profileSaveSelect,
 			profileSaveBtn,
 			widget.NewLabel(""),
-			widget.NewLabel("Load settings from a profile:"),
 			g.profileLoadSelect,
 			profileLoadBtn,
 			widget.NewLabel(""),
-			widget.NewSeparator(),
 			autoSwitchBtn,
 		),
 	)
 }
 
-func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
-	clearPersistBtn := widget.NewButton("Clear persisted configuration", func() {
+func (g *AppGUI) buildPersistBar() fyne.CanvasObject {
+	clearPersistBtn := widget.NewButton("Clear persist", func() {
 
 		dialog.ShowConfirm(
 			"Remove Persisted values",
@@ -751,9 +756,7 @@ func (g *AppGUI) buildSettingsTab() fyne.CanvasObject {
 		)
 	})
 	return container.NewPadded(
-		container.NewVBox(
-			widget.NewRichTextFromMarkdown("## Settings"),
-			widget.NewSeparator(),
+		container.NewHBox(
 			g.persistCheck,
 			widget.NewLabel(""),
 			clearPersistBtn,
@@ -854,15 +857,16 @@ func (g *AppGUI) buildLayout() {
 	powerLimitTab := g.buildPowerLimitTab()
 	tempLimitTab := g.buildTempLimitTab()
 	otherFlagsTab := g.buildOtherFlagsTab()
-	profilesTab := g.buildProfilesTab()
-	settingsTab := g.buildSettingsTab()
 	statusTab := g.buildStatusTab()
 	logTab := g.buildLogTab()
+
+	profilesBar := g.buildProfilesBar()
+	persistBar := g.buildPersistBar()
 
 	// Create a Max container that will act as the dynamic main content area
 	contentArea := container.NewMax()
 
-	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Profiles", "Settings", "Status", "Log"}
+	secNames := []string{"Voltage Offset", "Power Limit", "Temperature Limits", "Other Flags", "Status", "Log"}
 
 	tabs := widget.NewList(
 		func() int { return len(secNames) },
@@ -888,12 +892,8 @@ func (g *AppGUI) buildLayout() {
 		case 3:
 			contentArea.Objects = []fyne.CanvasObject{otherFlagsTab}
 		case 4:
-			contentArea.Objects = []fyne.CanvasObject{profilesTab}
-		case 5:
-			contentArea.Objects = []fyne.CanvasObject{settingsTab}
-		case 6:
 			contentArea.Objects = []fyne.CanvasObject{statusTab}
-		case 7:
+		case 5:
 			contentArea.Objects = []fyne.CanvasObject{logTab}
 		}
 		contentArea.Refresh()
@@ -903,7 +903,7 @@ func (g *AppGUI) buildLayout() {
 	// Top: App Name and version
 	appLabel := widget.NewRichText(
 		&widget.TextSegment{
-			Text: "Undervolt Go",
+			Text: "Undervolt Go Pro",
 			Style: widget.RichTextStyle{
 				SizeName:  theme.SizeNameHeadingText,
 				TextStyle: fyne.TextStyle{Bold: true},
@@ -971,15 +971,36 @@ func (g *AppGUI) buildLayout() {
 
 	// Action Buttons (docked bottom‑right)
 	settingsApplyBtn := widget.NewButton("Apply", func() {
-		// without len(args) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
-		args := g.collect()
-		if len(args) > 0 {
-			if err := g.run(args...); err == nil {
-				g.showWarning("Settings applied successfully.", 3*time.Second)
-			}
+		// Default title and message (when Persist is NOT checked)
+		title := "Apply offsets and values"
+		message := "Applying specified offsets and other values immediately.\n\nProceed?"
+
+		// Change the title and message if Persist IS checked
+		if g.persistCheck.Checked {
+			title = "Save settings (Persist)"
+			message = "The specified values will be saved under Persist (to be applied every time the computer starts up) and will not be applied immediately.\n\nProceed?"
 		}
+		
+		dialog.ShowConfirm(
+			title,
+			message,
+			func(confirmed bool) {
+				if confirmed {
+					// without len(args) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
+					args := g.collect()
+					if len(args) > 0 {
+						if err := g.run(args...); err == nil {
+							g.showWarning("Settings applied successfully.", 3*time.Second)
+						}
+					}
+				} else {
+					g.showWarning("Settings not applied. Cancelled by user.", 3*time.Second)
+				}
+			},
+			g.window,
+		)
 	})
-	mainBtnBar := container.NewHBox(layout.NewSpacer(), settingsApplyBtn) //add persist options here
+	mainBtnBar := container.NewHBox(persistBar, layout.NewSpacer(), settingsApplyBtn)
 
 	mainLayout := container.NewBorder(
 		nil,
@@ -987,7 +1008,7 @@ func (g *AppGUI) buildLayout() {
 		sidebar,
 		nil,
 		container.NewBorder(
-			nil, //profilebar
+			container.NewVBox(profilesBar, widget.NewSeparator(), g.newSmallSpace()),
 			container.NewVBox(widget.NewSeparator(), mainBtnBar, g.outputWarning),
 			nil,
 			nil,
