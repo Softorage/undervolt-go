@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -17,9 +18,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper" // ← add Viper for config file handling
+	"github.com/spf13/viper"
 )
 
 // Version
@@ -63,7 +65,14 @@ type PowerLimit struct {
 	BackupRest       uint64
 }
 
+// Pre-allocate byte slices for sysfs zero-allocation parsing
+var (
+	batteryType   = []byte("Battery")
+	dischargingSt = []byte("Discharging")
+)
+
 // isBatteryDischarging returns true if *any* battery in /sys/class/power_supply is discharging.
+// Optimized to operate directly on byte slices to avoid heap string allocations.
 func isBatteryDischarging() bool {
 	base := "/sys/class/power_supply"
 	entries, err := os.ReadDir(base)
@@ -72,16 +81,18 @@ func isBatteryDischarging() bool {
 	}
 	for _, e := range entries {
 		dir := filepath.Join(base, e.Name())
+
 		t, err := os.ReadFile(filepath.Join(dir, "type"))
-		if err != nil || strings.TrimSpace(string(t)) != "Battery" {
+		if err != nil || !bytes.HasPrefix(t, batteryType) {
 			continue
 		}
+
 		st, err := os.ReadFile(filepath.Join(dir, "status"))
 		if err != nil {
 			continue
 		}
 		// “Discharging” indicates battery is being drained
-		if strings.TrimSpace(string(st)) == "Discharging" {
+		if bytes.HasPrefix(st, dischargingSt) {
 			return true
 		}
 	}
@@ -103,62 +114,74 @@ func validCPUs() ([]int, error) {
 	return cpus, nil
 }
 
-// assertRoot exits if not run as root.
-func assertRoot() {
-	if os.Geteuid() != 0 {
-		fmt.Fprintln(os.Stderr, "You need to have root privileges. Rerun with sudo.")
-		os.Exit(1)
-	}
-}
-
-// writeMSR writes an 8-byte little-endian value to the given address on all CPUs.
+// writeMSR writes an 8-byte little-endian value to the given address on all CPUs concurrently.
 func writeMSR(val uint64, addr uint64) error {
-	assertRoot()
 	cpus, err := validCPUs()
 	if err != nil {
 		return err
 	}
+
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, val)
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(cpus))
+
+	// Write to all CPU MSRs concurrently to minimize voltage state skewness
 	for _, cpu := range cpus {
-		path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return fmt.Errorf("MSR module not loaded (run modprobe msr)")
-		}
-		log.Printf("Writing 0x%x to %s", val, path)
-		f, err := os.OpenFile(path, os.O_WRONLY, 0)
+		wg.Add(1)
+		go func(cpu int) {
+			defer wg.Done()
+			path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
+			f, err := os.OpenFile(path, os.O_WRONLY, 0)
+			if err != nil {
+				if os.IsPermission(err) {
+					errCh <- fmt.Errorf("permission denied to %s (is Secure Boot / Kernel Lockdown enabled?)", path)
+					return
+				}
+				errCh <- err
+				return
+			}
+
+			// Use WriteAt to map to the 'pwrite' syscall directly, avoiding an extra 'lseek' syscall
+			_, err = f.WriteAt(buf, int64(addr))
+			f.Close() // Close immediately
+
+			if err != nil {
+				errCh <- err
+			} else {
+				log.Printf("Successfully wrote 0x%x to %s", val, path)
+			}
+		}(cpu)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	// Return the first error if any
+	for err := range errCh {
 		if err != nil {
 			return err
 		}
-		_, err = f.Seek(int64(addr), io.SeekStart)
-		if err != nil {
-			f.Close()
-			return err
-		}
-		buf := make([]byte, 8)
-		binary.LittleEndian.PutUint64(buf, val)
-		if _, err := f.Write(buf); err != nil {
-			f.Close()
-			return err
-		}
-		f.Close()
 	}
 	return nil
 }
 
 // readMSR reads an 8-byte little-endian value from the given address on the specified CPU.
 func readMSR(addr uint64, cpu int) (uint64, error) {
-	assertRoot()
 	path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
+		if os.IsPermission(err) {
+			return 0, fmt.Errorf("permission denied to %s (is Secure Boot / Kernel Lockdown enabled?)", path)
+		}
 		return 0, err
 	}
 	defer f.Close()
-	_, err = f.Seek(int64(addr), io.SeekStart)
-	if err != nil {
-		return 0, err
-	}
+
 	buf := make([]byte, 8)
-	if _, err := io.ReadFull(f, buf); err != nil {
+	// Use ReadAt to map to the 'pread' syscall directly, avoiding an extra 'lseek' syscall
+	if _, err := f.ReadAt(buf, int64(addr)); err != nil {
 		return 0, err
 	}
 	val := binary.LittleEndian.Uint64(buf)
@@ -194,15 +217,13 @@ func unconvertOffset(y uint32) float64 {
 }
 
 // packOffset constructs an MSR value to read or write an offset for a plane.
-func packOffset(planeIndex int, offsetPtr *uint32) uint64 {
-	var off uint32 = 0
+func packOffset(planeIndex int, offset uint32, write bool) uint64 {
 	var hasOffset uint64 = 0
-	if offsetPtr != nil {
-		off = *offsetPtr
+	if write {
 		hasOffset = 1
 	}
 	// ((1 << 63) | (planeIndex << 40) | (1 << 36) | (hasOffset << 32) | off)
-	return (1 << 63) | (uint64(planeIndex) << 40) | (1 << 36) | (hasOffset << 32) | uint64(off)
+	return (1 << 63) | (uint64(planeIndex) << 40) | (1 << 36) | (hasOffset << 32) | uint64(offset)
 }
 
 // unpackOffset extracts the voltage offset (in mV) from an MSR response.
@@ -234,7 +255,7 @@ func readOffset(plane string, msr MSR) (float64, error) {
 	if !ok {
 		return 0, fmt.Errorf("unknown plane: %s", plane)
 	}
-	valueToWrite := packOffset(planeIndex, nil)
+	valueToWrite := packOffset(planeIndex, 0, false)
 	if err := writeMSR(valueToWrite, msr.addrVoltageOffsets); err != nil {
 		return 0, err
 	}
@@ -256,7 +277,7 @@ func setOffset(plane string, mV float64, msr MSR, force bool) error {
 	}
 	log.Printf("Setting %s offset to %.2f mV", plane, mV)
 	target := convertOffset(mV)
-	writeValue := packOffset(planeIndex, &target)
+	writeValue := packOffset(planeIndex, target, true)
 	if err := writeMSR(writeValue, msr.addrVoltageOffsets); err != nil {
 		return err
 	}
@@ -428,14 +449,13 @@ func runSystemctlCmd(name string, args ...string) {
 
 // enablePersistence creates and enables the systemd service based on current flags
 func enablePersistence() error {
-	assertRoot()
 	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("could not get executable path: %v", err)
+		return fmt.Errorf("could not get executable path: %w", err)
 	}
 	exePath, err = filepath.EvalSymlinks(exePath)
 	if err != nil {
-		return fmt.Errorf("could not resolve executable path: %v", err)
+		return fmt.Errorf("could not resolve executable path: %w", err)
 	}
 
 	// Reconstruct arguments, ignoring --persist
@@ -458,20 +478,20 @@ func enablePersistence() error {
 	}
 
 	serviceContent := fmt.Sprintf(`[Unit]
-	Description=Apply Undervolt Go settings on boot and resume
-	After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+Description=Apply Undervolt Go settings on boot and resume
+After=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 
-	[Service]
-	Type=oneshot
-	ExecStart=%s
+[Service]
+Type=oneshot
+ExecStart=%s
 
-	[Install]
-	WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-	`, execStart)
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+`, execStart)
 
 	fmt.Printf("\nCreating systemd service at %s...\n", persistConfigServicePath)
 	if err := os.WriteFile(persistConfigServicePath, []byte(serviceContent), 0644); err != nil {
-		return fmt.Errorf("failed to write service file: %v", err)
+		return fmt.Errorf("failed to write service file: %w", err)
 	}
 
 	runSystemctlCmd("systemctl", "daemon-reload")
@@ -483,14 +503,13 @@ func enablePersistence() error {
 
 // disablePersistence removes the systemd service entirely
 func disablePersistence() error {
-	assertRoot()
 	fmt.Printf("Removing systemd service %s...\n", persistConfigServicePath)
 
 	runSystemctlCmd("systemctl", "stop", persistConfigServiceName)
 	runSystemctlCmd("systemctl", "disable", persistConfigServiceName)
 
 	if err := os.Remove(persistConfigServicePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove service file: %v", err)
+		return fmt.Errorf("failed to remove service file: %w", err)
 	}
 
 	runSystemctlCmd("systemctl", "daemon-reload")
@@ -503,18 +522,17 @@ func disablePersistence() error {
 // ---------- Cobra Command Setup ----------
 
 var (
-	readFlag       bool
-	verboseFlag    bool
-	forceFlag      bool
-	tempFlag       int
-	tempBatFlag    int
-	turboFlag      int
-	coreOffset     float64
-	gpuOffset      float64
-	cacheOffset    float64
-	uncoreOffset   float64
-	analogioOffset float64
-	// Use string slices for multi-argument power limit flags.
+	readFlag           bool
+	verboseFlag        bool
+	forceFlag          bool
+	tempFlag           int
+	tempBatFlag        int
+	turboFlag          int
+	coreOffset         float64
+	gpuOffset          float64
+	cacheOffset        float64
+	uncoreOffset       float64
+	analogioOffset     float64
 	p1Args             []string
 	p2Args             []string
 	lockPowerLimit     bool
@@ -530,61 +548,44 @@ func applyFlags() error {
 		log.SetOutput(io.Discard)
 	}
 
-	// Ensure the MSR module is loaded.
-	matches, err := filepath.Glob("/dev/cpu/*/msr")
-	if err != nil || len(matches) == 0 {
-		cmd := exec.Command("modprobe", "msr")
-		if err := cmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load msr module: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
 	msr := ADDRESSES
 
 	// Apply voltage offsets if provided.
 	if !math.IsNaN(coreOffset) {
 		if err := setOffset("core", coreOffset, msr, forceFlag); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 	if !math.IsNaN(gpuOffset) {
 		if err := setOffset("gpu", gpuOffset, msr, forceFlag); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 	if !math.IsNaN(cacheOffset) {
 		if err := setOffset("cache", cacheOffset, msr, forceFlag); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 	if !math.IsNaN(uncoreOffset) {
 		if err := setOffset("uncore", uncoreOffset, msr, forceFlag); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 	if !math.IsNaN(analogioOffset) {
 		if err := setOffset("analogio", analogioOffset, msr, forceFlag); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
 	// Set temperature targets if provided.
 	if tempFlag >= 0 && tempFlag != 0 {
 		if err := setTemperature(tempFlag, msr); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 	if tempBatFlag >= 0 && tempBatFlag != 0 {
 		if err := setTemperature(tempBatFlag, msr); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -593,15 +594,15 @@ func applyFlags() error {
 		path := "/sys/devices/system/cpu/intel_pstate/no_turbo"
 		f, err := os.OpenFile(path, os.O_WRONLY, 0644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to open %s: %v\n", path, err)
-			os.Exit(1)
+			return fmt.Errorf("failed to open %s: %w", path, err)
 		}
-		defer f.Close()
 		state := strconv.Itoa(turboFlag)
 		if _, err := f.WriteString(state); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write to %s: %v\n", path, err)
-			os.Exit(1)
+			f.Close()
+			return fmt.Errorf("failed to write to %s: %w", path, err)
 		}
+		f.Close()
+
 		if turboFlag == 0 {
 			fmt.Println("New Intel Turbo State ENABLED")
 		} else {
@@ -614,14 +615,12 @@ func applyFlags() error {
 	// For long term (P1)
 	if len(p1Args) > 0 {
 		if len(p1Args) != 2 {
-			fmt.Fprintln(os.Stderr, "P1 requires two arguments: POWER_LIMIT TIME_WINDOW")
-			os.Exit(1)
+			return fmt.Errorf("P1 requires two arguments: POWER_LIMIT TIME_WINDOW")
 		}
 		power, err1 := strconv.ParseFloat(p1Args[0], 64)
 		timeWin, err2 := strconv.ParseFloat(p1Args[1], 64)
 		if err1 != nil || err2 != nil {
-			fmt.Fprintln(os.Stderr, "Invalid P1 arguments")
-			os.Exit(1)
+			return fmt.Errorf("invalid P1 arguments")
 		}
 		pl.LongTermEnabled = true
 		pl.LongTermPower = power
@@ -630,14 +629,12 @@ func applyFlags() error {
 	// For short term (P2)
 	if len(p2Args) > 0 {
 		if len(p2Args) != 2 {
-			fmt.Fprintln(os.Stderr, "P2 requires two arguments: POWER_LIMIT TIME_WINDOW")
-			os.Exit(1)
+			return fmt.Errorf("P2 requires two arguments: POWER_LIMIT TIME_WINDOW")
 		}
 		power, err1 := strconv.ParseFloat(p2Args[0], 64)
 		timeWin, err2 := strconv.ParseFloat(p2Args[1], 64)
 		if err1 != nil || err2 != nil {
-			fmt.Fprintln(os.Stderr, "Invalid P2 arguments")
-			os.Exit(1)
+			return fmt.Errorf("invalid P2 arguments")
 		}
 		pl.ShortTermEnabled = true
 		pl.ShortTermPower = power
@@ -649,8 +646,7 @@ func applyFlags() error {
 
 	if len(p1Args) > 0 || len(p2Args) > 0 || lockPowerLimit {
 		if err := setPowerLimit(pl, msr); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -658,8 +654,7 @@ func applyFlags() error {
 	if readFlag {
 		temp, err := readTemperature(msr)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Printf("Current Settings:\n\n")
 		fmt.Printf("Temperature target: -%d (%d°C)\n", temp, 100-temp)
@@ -697,9 +692,8 @@ func applyFlags() error {
 				func() string {
 					if plRead.Locked {
 						return " [locked]"
-					} else {
-						return ""
 					}
+					return ""
 				}())
 		}
 
@@ -724,47 +718,64 @@ func applyFlags() error {
 }
 
 var rootCmd = &cobra.Command{
-	Use:     rootCmdUseString,
-	Version: version,
-	Short:   "A tool for undervolting and power limit adjustments to reduce temperatures and extend lifespan",
-	Long:    "\nUndervolt Go\n\nA no-dependency utility to undervolt Intel CPUs on Linux systems with voltage offsets, perform power limit adjustments, set temperature limits, and more. It also features a user-friendly graphical version which lets you monitor temperatures and fan speeds with the help of 'sensors' package.\n\nPlease use with extreme caution. It has the potential to damage your computer if used incorrectly.",
-	Run: func(cmd *cobra.Command, args []string) {
-		// If no flags are provided, show usage (or run GUI if implemented)
+	Use:          rootCmdUseString,
+	Version:      version,
+	Short:        "A tool for undervolting and power limit adjustments",
+	Long:         "\nUndervolt Go\n\nA no-dependency utility to undervolt Intel CPUs on Linux systems.\n\nPlease use with extreme caution. It has the potential to damage your computer if used incorrectly.",
+	SilenceUsage: true, // Do not print usage when returning an execution error
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Do not require root/MSR for help or list commands
+		if cmd.Name() == "help" || cmd.Name() == "list" || cmd.Name() == "save" {
+			return nil
+		}
+
+		if os.Geteuid() != 0 {
+			return fmt.Errorf("you need to have root privileges. Rerun with sudo")
+		}
+
+		matches, err := filepath.Glob("/dev/cpu/*/msr")
+		if err != nil || len(matches) == 0 {
+			if err := exec.Command("modprobe", "msr").Run(); err != nil {
+				return fmt.Errorf("failed to load msr module (is it enabled in your kernel?): %w", err)
+			}
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().NFlag() == 0 {
 			runGUI()
-			return
+			return nil
 		}
 
 		// Handle --disable-persist
 		if disablePersistFlag {
 			if err := disablePersistence(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error disabling persistence: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error disabling persistence: %w", err)
 			}
 			// Exit early if that was the only flag passed
 			if cmd.Flags().NFlag() == 1 {
-				return
+				return nil
 			}
 		}
 
 		// Apply the settings
 		if err := applyFlags(); err != nil {
-			fmt.Printf("Failed to apply settings: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to apply settings: %w", err)
 		}
 
 		// Handle --persist
 		if persistFlag {
 			if err := enablePersistence(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error enabling persistence: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error enabling persistence: %w", err)
 			}
 		}
+		return nil
 	},
 }
 
 func init() {
-	cobra.OnInitialize(initConfig) // ← run before any command - load the config file
+	// run before any command - load the config file
+	cobra.OnInitialize(initConfig)
 
 	// Basic undervolt flags.
 	rootCmd.PersistentFlags().BoolVar(&readFlag, "read", false, "Read existing values")
@@ -787,8 +798,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&lockPowerLimit, "lock-power-limit", false, "Lock the power limit")
 
 	// Systemd Persistence Flags
-	rootCmd.PersistentFlags().BoolVar(&persistFlag, "persist", false, "Create a systemd service to persist current settings across boot and resume")
-	rootCmd.PersistentFlags().BoolVar(&disablePersistFlag, "disable-persist", false, "Remove the persistence systemd service completely")
+	rootCmd.PersistentFlags().BoolVar(&persistFlag, "persist", false, "Create a systemd service to persist current settings")
+	rootCmd.PersistentFlags().BoolVar(&disablePersistFlag, "disable-persist", false, "Remove the persistence systemd service")
 
 	rootCmd.AddCommand(profileCmd)
 	profileCmd.AddCommand(profileSaveCmd, profileListCmd, profileApplyCmd, profileAutoCmd)
@@ -828,12 +839,12 @@ func migrateConfigIfNeeded() error {
 	// Step B: Check if the new config ALREADY exists.
 	// If it does, we shouldn't overwrite it. We can just delete the old one or leave it alone.
 	if _, err := os.Stat(newPath); err == nil {
-		return nil // Already migrated
+		return nil
 	}
 
 	// Step C: Ensure we have root privileges to write to /etc/
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("a legacy configuration was found at %s. Please run this command with 'sudo' once to migrate it to /etc/", oldPath)
+		return fmt.Errorf("a legacy configuration was found at %s. Please run this command with 'sudo' once to migrate it", oldPath)
 	}
 
 	log.Printf("Migrating configuration from %s to %s...", oldPath, newPath)
@@ -876,7 +887,7 @@ func initConfig() {
 	viper.SetConfigFile(cfg)
 	viper.SetConfigType("yaml")
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("Failed to read config file: %v\n", err)
+		// no log output on boot when file is non-existent
 	}
 }
 
@@ -891,7 +902,7 @@ var profileSaveCmd = &cobra.Command{
 	Use:   "save [ac|battery]",
 	Short: "Save current flags as a profile",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		base := "profiles." + name + "."
 		viper.Set(base+"planes.core", coreOffset)
@@ -904,30 +915,31 @@ var profileSaveCmd = &cobra.Command{
 		viper.Set(base+"turbo", turboFlag)
 		// Only save P1 if exactly two args were provided
 		if len(p1Args) == 2 {
-			viper.Set(base+"pl.p1", []float64{strToFloat64(p1Args[0]), strToFloat64(p1Args[1])})
-		} else {
-			fmt.Fprintf(os.Stderr, "Skipping profile.%s.p1: expected 2 args, got %d\n", name, len(p1Args))
+			p1_0, err1 := strToFloat64(p1Args[0])
+			p1_1, err2 := strToFloat64(p1Args[1])
+			if err1 != nil || err2 != nil {
+				return fmt.Errorf("invalid numeric args for P1")
+			}
+			viper.Set(base+"pl.p1", []float64{p1_0, p1_1})
 		}
 		// Only save P2 if exactly two args were provided
 		if len(p2Args) == 2 {
-			viper.Set(base+"pl.p2", []float64{strToFloat64(p2Args[0]), strToFloat64(p2Args[1])})
-		} else {
-			fmt.Fprintf(os.Stderr, "Skipping profile.%s.p2: expected 2 args, got %d\n", name, len(p2Args))
+			p2_0, err1 := strToFloat64(p2Args[0])
+			p2_1, err2 := strToFloat64(p2Args[1])
+			if err1 != nil || err2 != nil {
+				return fmt.Errorf("invalid numeric args for P2")
+			}
+			viper.Set(base+"pl.p2", []float64{p2_0, p2_1})
 		}
-		//
-		if err := os.MkdirAll(
-			filepath.Join(configDir()),
-			0755,
-		); err != nil {
-			log.Fatal(err)
+
+		if err := os.MkdirAll(filepath.Join(configDir()), 0755); err != nil {
+			return err
 		}
-		if err := viper.WriteConfigAs(
-			filepath.Join(configDir(), "config.yaml"),
-		); err != nil {
-			fmt.Fprintln(os.Stderr, "Error saving config: ", err)
-			os.Exit(1)
+		if err := viper.WriteConfigAs(filepath.Join(configDir(), "config.yaml")); err != nil {
+			return fmt.Errorf("error saving config: %w", err)
 		}
 		fmt.Println("Profile ", name, " saved.")
+		return nil
 	},
 }
 
@@ -947,7 +959,7 @@ var profileApplyCmd = &cobra.Command{
 	Use:   "apply [auto|ac|battery]",
 	Short: "Apply given profile",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if name == "auto" {
 			if isBatteryDischarging() {
@@ -958,8 +970,7 @@ var profileApplyCmd = &cobra.Command{
 		}
 		key := "profiles." + name
 		if !viper.IsSet(key) {
-			fmt.Printf("Profile '%s' not found.\n", name)
-			return
+			return fmt.Errorf("profile '%s' not found", name)
 		}
 		// Get values from profile and set the variables
 		p := viper.Sub(key)
@@ -989,9 +1000,9 @@ var profileApplyCmd = &cobra.Command{
 		}
 		// Apply the settings
 		if err := applyFlags(); err != nil {
-			fmt.Printf("Failed to apply settings: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to apply settings: %w", err)
 		}
+		return nil
 	},
 }
 
@@ -1003,15 +1014,11 @@ var profileAutoCmd = &cobra.Command{
 	Use:   "auto-switch [enable|disable]",
 	Short: "Enable or disable automatic profile switching on AC/Battery events",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		action := args[0]
 		if action == "enable" {
-			assertRoot()
 			exePath, _ := os.Executable()
 			exePath, _ = filepath.EvalSymlinks(exePath)
-
-			// Capture the current HOME so systemd knows where to find the config.yaml
-			//homeDir := os.Getenv("HOME")
 
 			serviceContent := fmt.Sprintf(`[Unit]
 Description=Apply Undervolt Go Auto Profile
@@ -1023,15 +1030,19 @@ ExecStart=%s profile apply auto
 `, exePath)
 
 			if err := os.WriteFile(autoServicePath, []byte(serviceContent), 0644); err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to create service:", err)
-				os.Exit(1)
+				return fmt.Errorf("failed to create service: %w", err)
 			}
 
-			// systemctl --no-block is important so udev doesn't hang waiting for the command
-			ruleContent := `SUBSYSTEM=="power_supply", ACTION=="change", RUN+="/bin/systemctl --no-block start undervolt-go-auto.service"` + "\n"
+			// Dynamically find systemctl path to account for different Linux distros (e.g. NixOS)
+			systemctlPath, err := exec.LookPath("systemctl")
+			if err != nil {
+				systemctlPath = "/usr/bin/systemctl"
+			}
+
+			// --no-block is important so udev doesn't hang waiting for the command
+			ruleContent := fmt.Sprintf(`SUBSYSTEM=="power_supply", ACTION=="change", RUN+="%s --no-block start undervolt-go-auto.service"`+"\n", systemctlPath)
 			if err := os.WriteFile(autoUdevRule, []byte(ruleContent), 0644); err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to create udev rule:", err)
-				os.Exit(1)
+				return fmt.Errorf("failed to create udev rule: %w", err)
 			}
 
 			exec.Command("systemctl", "daemon-reload").Run()
@@ -1039,16 +1050,15 @@ ExecStart=%s profile apply auto
 			fmt.Println("Auto-switch enabled.")
 
 		} else if action == "disable" {
-			assertRoot()
 			os.Remove(autoServicePath)
 			os.Remove(autoUdevRule)
 			exec.Command("systemctl", "daemon-reload").Run()
 			exec.Command("udevadm", "control", "--reload-rules").Run()
 			fmt.Println("Auto-switch disabled.")
 		} else {
-			fmt.Println("Invalid argument. Use 'enable' or 'disable'.")
-			os.Exit(1)
+			return fmt.Errorf("invalid argument. Use 'enable' or 'disable'")
 		}
+		return nil
 	},
 }
 
@@ -1059,17 +1069,17 @@ func main() {
 	}
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		// Output handled inherently by cobra RunE structure
 		os.Exit(1)
 	}
 }
 
 // helper functions
 // strToFloat64 converts a string to float64 or fatally logs.
-func strToFloat64(s string) float64 {
+func strToFloat64(s string) (float64, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		log.Fatalf("Invalid numeric argument %q: %v", s, err)
+		return 0, fmt.Errorf("invalid numeric argument %q: %w", s, err)
 	}
-	return f
+	return f, nil
 }
