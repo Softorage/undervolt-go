@@ -903,7 +903,7 @@ func (g *AppGUI) buildLayout() {
 	// Top: App Name and version
 	appLabel := widget.NewRichText(
 		&widget.TextSegment{
-			Text: "Undervolt Go Pro",
+			Text: "Undervolt Go",
 			Style: widget.RichTextStyle{
 				SizeName:  theme.SizeNameHeadingText,
 				TextStyle: fyne.TextStyle{Bold: true},
@@ -911,7 +911,7 @@ func (g *AppGUI) buildLayout() {
 			},
 		},
 		&widget.TextSegment{
-			Text: fmt.Sprintf("\nversion %s", version), // version is defined in main.go
+			Text: fmt.Sprintf("\nPRO %s", version), // version is defined in main.go
 			Style: widget.RichTextStyle{
 				SizeName:  theme.SizeNameCaptionText,
 				ColorName: theme.ColorNamePlaceHolder,
