@@ -281,7 +281,7 @@ func (g *AppGUI) initWidgets() {
 			if checked {
 				dialog.ShowInformation(
 					"Persist and apply on startup",
-					"Persist allows you to apply the specified values everytime the computer starts up.\n\nWhen this is checked, pressing 'Apply' button:\n1. Enables Persist, saving current offsets or other values,\n2. Does NOT apply the offsets or other values.\n\nNOTE: Make sure the offsets and other values being persisted are stable.",
+					"Persist allows you to apply the specified values everytime the computer starts up.\n\nWhen this is checked, pressing 'Apply' button:\n1. Applies the offsets or other values immediately,\n2. Enables Persist, saving current offsets or other values.\n\nNOTE: Make sure the offsets and other values being persisted are stable.",
 					g.window,
 				)
 			}
@@ -977,8 +977,8 @@ func (g *AppGUI) buildLayout() {
 
 		// Change the title and message if Persist IS checked
 		if g.persistCheck.Checked {
-			title = "Save settings (Persist)"
-			message = "The specified values will be saved under Persist (to be applied every time the computer starts up) and will not be applied immediately.\n\nProceed?"
+			title = "Apply and save to Persist"
+			message = "The specified offsets and values will be applied and then saved under Persist (to be applied every time the computer starts up).\n\nProceed?"
 		}
 		
 		dialog.ShowConfirm(

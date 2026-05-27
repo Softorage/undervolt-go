@@ -702,13 +702,21 @@ func applyFlags() error {
 		if _, err := os.Stat(persistConfigServicePath); err == nil {
 			fmt.Println("   Status: ENABLED (systemd service active)")
 			content, err := os.ReadFile(persistConfigServicePath)
+			foundCmd := false
 			if err == nil {
 				for _, line := range strings.Split(string(content), "\n") {
+					line = strings.TrimSpace(line) // Clean up potential whitespace
 					if strings.HasPrefix(line, "ExecStart=") {
-						fmt.Printf("   Command: %s\n", strings.TrimPrefix(line, "ExecStart="))
+						fmt.Printf("   Active Command: %s\n", strings.TrimPrefix(line, "ExecStart="))
+						foundCmd = true
 						break
 					}
 				}
+			}
+			
+			// Fallback in case the file exists but is malformed
+			if !foundCmd {
+				fmt.Println("   Active Command: [Service active, but ExecStart could not be parsed]")
 			}
 		} else {
 			fmt.Println("   Status: DISABLED")
