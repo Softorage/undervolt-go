@@ -18,10 +18,10 @@ Please leave a star if you find it useful!
 
 - [Introduction](#introduction)
 - [Screenshots](#screenshots)
+- [Features](#features)
 - [Installation](#installation)
 - [Building](#building)
 - [Usage](#usage)
-- [Features](#features)
 - [Dependencies](#dependencies)
 - [Configuration](#configuration)
 - [Examples](#examples)
@@ -37,40 +37,6 @@ Please leave a star if you find it useful!
 
 **Undervolt Go** enables users to apply voltage offsets to various components of Intel CPUs, such as the core, cache, GPU, and more. By adjusting these voltage offsets, users can achieve lower power consumption and reduced heat output, which is particularly beneficial for laptops and compact systems where thermal management is crucial.
 
-## Building
-
-To build **Undervolt Go**, follow these steps:
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/Softorage/undervolt-go.git
-   ```
-
-2. **Navigate to the project directory:**
-
-   ```bash
-   cd undervolt-go
-   ```
-
-3. **Build the application:**
-
-   ```bash
-   go build
-   ```
-
-   This will generate the `undervolt-go` executable in the current directory.
-
-4. **Run the application:**
-
-   ```bash
-   sudo ./undervolt-go --help
-   sudo ./undervolt-go --read
-   ```
-
-   Because the program accesses MSRs, you must run it as root (e.g., with sudo).
-
-
 ## Screenshots
 | Description          | Screenshot                                                                       |
 | -------------------- | -------------------------------------------------------------------------------- |
@@ -83,6 +49,17 @@ To build **Undervolt Go**, follow these steps:
 | Read                 | ![Read](/dist/images/screenshots/v0.8.2/Read-UndervoltGo.png)                    |
 | Log                  | ![Profiles](/dist/images/screenshots/v0.8.2/Log-UndervoltGo.png)                 |
 
+## Features
+
+- **GUI:** Interact with 'Undervolt Go' from a user-friendly graphical user interface.
+- **Voltage Offset Adjustment:** Apply custom voltage offsets to CPU components to optimize performance and thermal characteristics.
+- **Temperature Target Override:** Set a custom temperature target for CPU throttling, on AC or battery power.
+- **Power Limit Configuration:** Adjust the CPU's power limits to control performance and power consumption.
+- **Intel Turbo Adjustment:** Enable or disable Intel Turbo for optimal performance.
+- **Profile Management:** Save and apply profiles for quick configuration changes.
+- **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power.
+- **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
+- **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
 
 ## Installation
 
@@ -120,6 +97,39 @@ To build **Undervolt Go**, follow these steps:
          `sudo ./uninstall-undervolt.sh`
       - Keep configuration files, systemd services for persist and profile auto-swtich, udev rule for profile auto-switch
          `sudo ./uninstall-undervolt.sh --keepconfig --keeppersist --keepautoswitch`
+
+## Building
+
+To build **Undervolt Go**, follow these steps:
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/Softorage/undervolt-go.git
+   ```
+
+2. **Navigate to the project directory:**
+
+   ```bash
+   cd undervolt-go
+   ```
+
+3. **Build the application:**
+
+   ```bash
+   go build
+   ```
+
+   This will generate the `undervolt-go` executable in the current directory.
+
+4. **Run the application:**
+
+   ```bash
+   sudo ./undervolt-go --help
+   sudo ./undervolt-go --read
+   ```
+
+   Because the program accesses MSRs, you must run it as root (e.g., with sudo).
 
 ## Usage
 
@@ -228,18 +238,6 @@ To build **Undervolt Go**, follow these steps:
    ```
 
 8. Make sure to use `undervolt-go-pro` instead of `undervolt-go` in terminal in case you have installed the GUI version.
-
-## Features
-
-- **GUI:** Interact with 'Undervolt Go' from a user-friendly graphical user interface.
-- **Voltage Offset Adjustment:** Apply custom voltage offsets to CPU components to optimize performance and thermal characteristics.
-- **Temperature Target Override:** Set a custom temperature target for CPU throttling, on AC or battery power.
-- **Power Limit Configuration:** Adjust the CPU's power limits to control performance and power consumption.
-- **Intel Turbo Adjustment:** Enable or disable Intel Turbo for optimal performance.
-- **Profile Management:** Save and apply profiles for quick configuration changes.
-- **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power.
-- **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
-- **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
 
 ## Dependencies
 
