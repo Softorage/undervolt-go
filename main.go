@@ -713,7 +713,7 @@ func applyFlags() error {
 					}
 				}
 			}
-			
+
 			// Fallback in case the file exists but is malformed
 			if !foundCmd {
 				fmt.Println("   Active Command: [Service active, but ExecStart could not be parsed]")

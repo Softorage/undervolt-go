@@ -130,11 +130,11 @@ type AppGUI struct {
 
 	// Output Label: Status tab output
 	// Output Warning: Bottom info bar
-	outputLabel   *widget.Label
-	outputWarning *widget.Label
-	outputLog     *widget.Label
-
-	outputLogPlaceholder string
+	outputLabel              *widget.Label
+	outputWarning            *widget.Label
+	outputWarningDefaultText string
+	outputLog                *widget.Label
+	outputLogPlaceholder     string
 
 	// Core UI Elements
 	planes       []planeUI
@@ -195,7 +195,9 @@ func (g *AppGUI) initWidgets() {
 	g.outputLabel = widget.NewLabelWithData(g.outputLabelBinding)
 	g.outputLabel.Wrapping = fyne.TextWrapWord
 
+	g.outputWarningDefaultText = "Ready. Interact with inputs to view information."
 	g.outputWarningBind = binding.NewString()
+	g.outputWarningBind.Set(g.outputWarningDefaultText)
 	g.outputWarning = widget.NewLabelWithData(g.outputWarningBind)
 	g.outputWarning.Wrapping = fyne.TextWrapWord
 
@@ -327,7 +329,7 @@ func (g *AppGUI) showWarning(msg string, duration time.Duration) {
 	}
 	if duration > 0 {
 		g.warningTimer = time.AfterFunc(duration, func() {
-			g.outputWarningBind.Set("")
+			g.outputWarningBind.Set(g.outputWarningDefaultText)
 		})
 	}
 	g.appendToLog(fmt.Sprintf("info: %s", msg))
@@ -526,7 +528,7 @@ func (g *AppGUI) buildProfilesBar() fyne.CanvasObject {
 	profileSaveBtn := widget.NewButton("Save", func() {
 		name := g.profileSaveSelect.Selected
 		if name == "" {
-			g.showWarning("Please select a profile to save.", 3*time.Second)
+			g.showWarning("Please select a profile to save to.", 3*time.Second)
 			return
 		}
 
@@ -542,7 +544,7 @@ func (g *AppGUI) buildProfilesBar() fyne.CanvasObject {
 							g.showWarning("Settings saved successfully as profile "+name+".", 3*time.Second)
 						} else {
 							// Handle error if g.run fails
-							g.showWarning("Failed to save profile: "+err.Error(), 3*time.Second)
+							g.showWarning("Failed to save to profile: "+err.Error(), 3*time.Second)
 						}
 					}
 				} else {
@@ -863,6 +865,41 @@ func (g *AppGUI) buildLayout() {
 	profilesBar := g.buildProfilesBar()
 	persistBar := g.buildPersistBar()
 
+	// Action Buttons (docked bottom‑right)
+	settingsApplyBtn := widget.NewButton("Apply", func() {
+		// Default title and message (when Persist is NOT checked)
+		title := "Apply offsets and values"
+		message := "Applying specified offsets and other values immediately.\n\nProceed?"
+
+		// Change the title and message if Persist IS checked
+		if g.persistCheck.Checked {
+			title = "Apply and save to Persist"
+			message = "The specified offsets and values will be applied and then saved under Persist (to be applied every time the computer starts up).\n\nProceed?"
+		}
+
+		dialog.ShowConfirm(
+			title,
+			message,
+			func(confirmed bool) {
+				if confirmed {
+					// without len(args) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
+					args := g.collect()
+					if len(args) > 0 {
+						if err := g.run(args...); err == nil {
+							g.showWarning("Settings applied successfully.", 3*time.Second)
+						}
+					}
+				} else {
+					g.showWarning("Settings not applied. Cancelled by user.", 3*time.Second)
+				}
+			},
+			g.window,
+		)
+	})
+
+	topSection := container.NewVBox(profilesBar, widget.NewSeparator(), g.newSmallSpace())
+	bottomSection := container.NewHBox(persistBar, layout.NewSpacer(), settingsApplyBtn) // mainBtnBar
+
 	// Create a Max container that will act as the dynamic main content area
 	contentArea := container.NewMax()
 
@@ -884,16 +921,28 @@ func (g *AppGUI) buildLayout() {
 	tabs.OnSelected = func(id widget.ListItemID) {
 		switch id {
 		case 0:
+			topSection.Show()
+			bottomSection.Show()
 			contentArea.Objects = []fyne.CanvasObject{voltageOffsetTab}
 		case 1:
+			topSection.Show()
+			bottomSection.Show()
 			contentArea.Objects = []fyne.CanvasObject{powerLimitTab}
 		case 2:
+			topSection.Show()
+			bottomSection.Show()
 			contentArea.Objects = []fyne.CanvasObject{tempLimitTab}
 		case 3:
+			topSection.Show()
+			bottomSection.Show()
 			contentArea.Objects = []fyne.CanvasObject{otherFlagsTab}
 		case 4:
+			topSection.Hide()
+			bottomSection.Hide()
 			contentArea.Objects = []fyne.CanvasObject{statusTab}
 		case 5:
+			topSection.Hide()
+			bottomSection.Hide()
 			contentArea.Objects = []fyne.CanvasObject{logTab}
 		}
 		contentArea.Refresh()
@@ -969,47 +1018,14 @@ func (g *AppGUI) buildLayout() {
 	// Combine the background color and the sidebar content
 	sidebar := container.NewMax(sidebarBg, sidebarContent)
 
-	// Action Buttons (docked bottom‑right)
-	settingsApplyBtn := widget.NewButton("Apply", func() {
-		// Default title and message (when Persist is NOT checked)
-		title := "Apply offsets and values"
-		message := "Applying specified offsets and other values immediately.\n\nProceed?"
-
-		// Change the title and message if Persist IS checked
-		if g.persistCheck.Checked {
-			title = "Apply and save to Persist"
-			message = "The specified offsets and values will be applied and then saved under Persist (to be applied every time the computer starts up).\n\nProceed?"
-		}
-		
-		dialog.ShowConfirm(
-			title,
-			message,
-			func(confirmed bool) {
-				if confirmed {
-					// without len(args) > 0, clicking on apply without any setting relaunches another window of Undervolt Go
-					args := g.collect()
-					if len(args) > 0 {
-						if err := g.run(args...); err == nil {
-							g.showWarning("Settings applied successfully.", 3*time.Second)
-						}
-					}
-				} else {
-					g.showWarning("Settings not applied. Cancelled by user.", 3*time.Second)
-				}
-			},
-			g.window,
-		)
-	})
-	mainBtnBar := container.NewHBox(persistBar, layout.NewSpacer(), settingsApplyBtn)
-
 	mainLayout := container.NewBorder(
 		nil,
 		nil,
 		sidebar,
 		nil,
 		container.NewBorder(
-			container.NewVBox(profilesBar, widget.NewSeparator(), g.newSmallSpace()),
-			container.NewVBox(widget.NewSeparator(), mainBtnBar, g.outputWarning),
+			topSection,
+			container.NewVBox(widget.NewSeparator(), bottomSection, g.outputWarning),
 			nil,
 			nil,
 			contentArea,
