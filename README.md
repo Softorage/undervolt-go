@@ -17,11 +17,11 @@ Please leave a star if you find it useful!
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Building](#building)
 - [Usage](#usage)
 - [Features](#features)
-- [Screenshots](#screenshots)
 - [Dependencies](#dependencies)
 - [Configuration](#configuration)
 - [Examples](#examples)
@@ -69,6 +69,19 @@ To build **Undervolt Go**, follow these steps:
    ```
 
    Because the program accesses MSRs, you must run it as root (e.g., with sudo).
+
+
+## Screenshots
+| Description          | Screenshot                                                                       |
+| -------------------- | -------------------------------------------------------------------------------- |
+| Voltage Offsets      | ![Voltage Offsets](/dist/images/screenshots/v0.8.2/VoltOffset-UndervoltGo.png)   |
+| Power Limit          | ![Power Limit](/dist/images/screenshots/v0.8.2/PowerLimit-UndervoltGo.png)       |
+| Temperature Limit    | ![Temperature Limit](/dist/images/screenshots/v0.8.2/TempLimit-UndervoltGo.png)  |
+| Other Flags          | ![Other Flags](/dist/images/screenshots/v0.8.2/OtherFlags-UndervoltGo.png)       |
+| Check Core Temps     | ![Check Core Temps](/dist/images/screenshots/v0.8.2/CheckTemp-UndervoltGo.png)   |
+| Check Fan RPMs       | ![Check Fan RPMs](/dist/images/screenshots/v0.8.2/CheckFans-UndervoltGo.png)     |
+| Read                 | ![Read](/dist/images/screenshots/v0.8.2/Read-UndervoltGo.png)                    |
+| Log                  | ![Profiles](/dist/images/screenshots/v0.8.2/Log-UndervoltGo.png)                 |
 
 
 ## Installation
@@ -227,21 +240,6 @@ To build **Undervolt Go**, follow these steps:
 - **Auto Profile Switching:** Automatically switch to the appropriate profile based on AC or battery power.
 - **Temperature Monitoring:** Monitor and display the current temperature of the CPU.
 - **Fan Monitoring:** Monitor and display the current fan speed of the CPU.
-
-## Screenshots
-| Description | Screenshot |
-| --- | --- |
-| Voltage Offsets | ![Voltage Offsets](/dist/images/screenshots/v0.6.2/VoltOffset-UndervoltGo.png) |
-| Power Limit | ![Power Limit](/dist/images/screenshots/v0.6.2/PowerLimit-UndervoltGo.png) |
-| Temperature Limit | ![Temperature Limit](/dist/images/screenshots/v0.6.2/TempLimit-UndervoltGo.png) |
-| Other Flags | ![Other Flags](/dist/images/screenshots/v0.6.2/OtherFlags-UndervoltGo.png) |
-| Profiles | ![Profiles](/dist/images/screenshots/v0.6.2/Profiles-UndervoltGo.png) |
-| Save Profile | ![Save Profile](/dist/images/screenshots/v0.6.2/SaveProfile-UndervoltGo.png) |
-| Load Profile | ![Load Profile](/dist/images/screenshots/v0.6.2/LoadProfile-UndervoltGo.png) |
-| Settings | ![Settings](/dist/images/screenshots/v0.6.2/Settings-UndervoltGo.png) |
-| Check Core Temps | ![Check Core Temps](/dist/images/screenshots/v0.6.2/CheckTemp-UndervoltGo.png) |
-| Check Fan RPMs | ![Check Fan RPMs](/dist/images/screenshots/v0.6.2/CheckFans-UndervoltGo.png) |
-| Read | ![Read](/dist/images/screenshots/v0.6.2/Read-UndervoltGo.png) |
 
 ## Dependencies
 
