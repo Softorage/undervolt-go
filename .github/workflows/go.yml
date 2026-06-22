@@ -52,7 +52,7 @@ jobs:
     needs: checker
     if: needs.checker.outputs.should_run == 'true'
     runs-on: ubuntu-latest
-    container: golang:1.26-bullseye # Debian Bullseye-based Go container to ensure maximum GLIBC compatibility (GLIBC 2.31). Everything runs as root.
+    container: golang:1.26-bookworm # Debian Bullseye-based Go container to ensure maximum GLIBC compatibility (GLIBC 2.31). Everything runs as root.
     steps:
     - uses: actions/checkout@v6
       with:
