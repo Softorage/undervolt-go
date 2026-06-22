@@ -52,25 +52,24 @@ jobs:
     needs: checker
     if: needs.checker.outputs.should_run == 'true'
     runs-on: ubuntu-latest
+    container: golang:1.26-bullseye # Debian Bullseye-based Go container to ensure maximum GLIBC compatibility (GLIBC 2.31). Everything runs as root.
     steps:
     - uses: actions/checkout@v6
       with:
         fetch-depth: 0  # Ensures full history, including tags
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version: '1.24.1'
     - name: Setup Pages
       uses: actions/configure-pages@v6
     # Extract the Git Version & Commit to define dynamic folder names
     - name: Set up Dynamic Folder Names
       run: |
+        # Avoid git "dubious ownership" errors inside the container
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
         # Save to GITHUB_ENV so subsequent steps can use these variables
         echo "GIT_TAG=$(git describe --tags --always)" >> $GITHUB_ENV
     - name: Prepare dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev # add 'libglu1-mesa-dev freeglut3-dev' if needed
+        apt-get update
+        apt-get install -y build-essential pkg-config libgl1-mesa-dev mesa-common-dev xorg-dev tree # add 'libglu1-mesa-dev freeglut3-dev' if needed
         go mod tidy # Ensures all required dependencies are installed
         echo "All required dependencies are installed"
     - name: Build undervolt-go
@@ -81,7 +80,7 @@ jobs:
     - name: Build Undervolt Go Pro
       run: |
         echo "Building Undervolt Go Pro..."
-        go build -tags gui -ldflags="-X 'main.version=${{ env.GIT_TAG }}' -s -w" -o undervolt-go-pro .
+        go build -tags=gui,no_emoji,no_animations,no_metadata -ldflags="-X 'main.version=${{ env.GIT_TAG }}' -s -w" -o undervolt-go-pro .
         echo "Build complete!"
     - name: Make compiled binary available
       run: |
