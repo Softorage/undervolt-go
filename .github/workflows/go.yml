@@ -31,7 +31,7 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: check
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.26-bookworm # Debian Bullseye-based Go container to ensure maximum GLIBC compatibility (GLIBC 2.31). Everything runs as root.
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0  # Ensures full history, including tags
     - name: Setup Pages
