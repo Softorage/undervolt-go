@@ -101,15 +101,59 @@ func isBatteryDischarging() bool {
 
 // ---------- MSR Read/Write Functions ----------
 
+type fdKey struct {
+	cpu  int
+	mode int // os.O_RDONLY or os.O_WRONLY
+}
+
+var (
+	msrFDs   = make(map[fdKey]*os.File)
+	msrFDMux sync.RWMutex
+)
+
+// getMSRFile returns a cached file descriptor for /dev/cpu/<cpu>/msr (thread-safe for pwrite/pread)
+func getMSRFile(cpu int, mode int) (*os.File, error) {
+	key := fdKey{cpu: cpu, mode: mode}
+	msrFDMux.RLock()
+	f, ok := msrFDs[key]
+	msrFDMux.RUnlock()
+	if ok {
+		return f, nil
+	}
+
+	msrFDMux.Lock()
+	defer msrFDMux.Unlock()
+	if f, ok := msrFDs[key]; ok {
+		return f, nil
+	}
+
+	path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
+	f, err := os.OpenFile(path, mode, 0)
+	if err != nil {
+		if os.IsPermission(err) {
+			return nil, fmt.Errorf("permission denied to %s (is Secure Boot / Kernel Lockdown enabled?)", path)
+		}
+		return nil, err
+	}
+	msrFDs[key] = f
+	return f, nil
+}
+
 // validCPUs returns CPU indices with an available /dev/cpu/<i> directory.
 func validCPUs() ([]int, error) {
+	matches, err := filepath.Glob("/dev/cpu/[0-9]*")
+	if err != nil || len(matches) == 0 {
+		return nil, fmt.Errorf("no CPU nodes found in /dev/cpu/ (is msr module loaded?)")
+	}
 	var cpus []int
-	n := runtime.NumCPU()
-	for i := 0; i < n; i++ {
-		path := fmt.Sprintf("/dev/cpu/%d", i)
-		if info, err := os.Stat(path); err == nil && info.IsDir() {
-			cpus = append(cpus, i)
+	for _, m := range matches {
+		base := filepath.Base(m)
+		if cpu, err := strconv.Atoi(base); err == nil {
+			cpus = append(cpus, cpu)
 		}
+	}
+	if len(cpus) == 0 {
+		return nil, fmt.Errorf("failed to parse valid CPU indices from /dev/cpu/")
 	}
 	return cpus, nil
 }
@@ -132,25 +176,17 @@ func writeMSR(val uint64, addr uint64) error {
 		wg.Add(1)
 		go func(cpu int) {
 			defer wg.Done()
-			path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
-			f, err := os.OpenFile(path, os.O_WRONLY, 0)
+			f, err := getMSRFile(cpu, os.O_WRONLY)
 			if err != nil {
-				if os.IsPermission(err) {
-					errCh <- fmt.Errorf("permission denied to %s (is Secure Boot / Kernel Lockdown enabled?)", path)
-					return
-				}
 				errCh <- err
 				return
 			}
-
-			// Use WriteAt to map to the 'pwrite' syscall directly, avoiding an extra 'lseek' syscall
 			_, err = f.WriteAt(buf, int64(addr))
-			f.Close() // Close immediately
 
 			if err != nil {
 				errCh <- err
 			} else {
-				log.Printf("Successfully wrote 0x%x to %s", val, path)
+				log.Printf("Successfully wrote 0x%x to CPU %d MSR 0x%x", val, cpu, addr)
 			}
 		}(cpu)
 	}
@@ -169,15 +205,10 @@ func writeMSR(val uint64, addr uint64) error {
 
 // readMSR reads an 8-byte little-endian value from the given address on the specified CPU.
 func readMSR(addr uint64, cpu int) (uint64, error) {
-	path := fmt.Sprintf("/dev/cpu/%d/msr", cpu)
-	f, err := os.OpenFile(path, os.O_RDONLY, 0)
+	f, err := getMSRFile(cpu, os.O_RDONLY)
 	if err != nil {
-		if os.IsPermission(err) {
-			return 0, fmt.Errorf("permission denied to %s (is Secure Boot / Kernel Lockdown enabled?)", path)
-		}
 		return 0, err
 	}
-	defer f.Close()
 
 	buf := make([]byte, 8)
 	// Use ReadAt to map to the 'pread' syscall directly, avoiding an extra 'lseek' syscall
@@ -185,7 +216,7 @@ func readMSR(addr uint64, cpu int) (uint64, error) {
 		return 0, err
 	}
 	val := binary.LittleEndian.Uint64(buf)
-	log.Printf("Read 0x%x from %s", val, path)
+	log.Printf("Read 0x%x from CPU %d MSR 0x%x", val, cpu, addr)
 	return val, nil
 }
 
@@ -341,6 +372,11 @@ func setOffset(plane string, mV float64, msr MSR, force bool) error {
 		return err
 	}
 	if math.Abs(wantMV-readMV) > 0.001 {
+		if math.Abs(readMV) < 0.001 && wantMV != 0 {
+			return fmt.Errorf("failed to apply %s offset (set %.2f mV, read 0.00 mV).\n"+
+				"   -> Undervolting appears to be LOCKED by your BIOS (Intel Undervolt Protection / Plundervolt mitigation).\n"+
+				"   -> Enable CPU Undervolting / Overclocking Feature in your BIOS settings", plane, wantMV)
+		}
 		return fmt.Errorf("failed to apply %s: set %.2f, read %.2f", plane, wantMV, readMV)
 	}
 	return nil
@@ -511,23 +547,33 @@ func enablePersistence() error {
 		return fmt.Errorf("could not resolve executable path: %w", err)
 	}
 
-	// Reconstruct arguments, ignoring --persist
-	var execArgs []string
-	for _, arg := range os.Args[1:] {
-		if arg == "--persist" || arg == "-persist" {
-			continue
-		}
-		// Wrap in quotes if it contains spaces
-		if strings.Contains(arg, " ") {
-			execArgs = append(execArgs, fmt.Sprintf("%q", arg))
-		} else {
-			execArgs = append(execArgs, arg)
-		}
-	}
+	var execStart string
+	hasProfiles := viper.IsSet("profiles.ac") || viper.IsSet("profiles.battery")
 
-	execStart := exePath
-	if len(execArgs) > 0 {
-		execStart += " " + strings.Join(execArgs, " ")
+	if hasProfiles {
+		execStart = fmt.Sprintf("%s profile apply auto", exePath)
+		fmt.Println("Persistence Mode: Profile Auto-Switch")
+		fmt.Println("   -> Systemd will automatically apply 'ac' or 'battery' profiles based on power state.")
+	} else {
+		// Fallback: Reconstruct exact CLI flags when no profiles exist
+		var execArgs []string
+		for _, arg := range os.Args[1:] {
+			if arg == "--persist" || arg == "-persist" {
+				continue
+			}
+			if strings.Contains(arg, " ") {
+				execArgs = append(execArgs, fmt.Sprintf("%q", arg))
+			} else {
+				execArgs = append(execArgs, arg)
+			}
+		}
+		execStart = exePath
+		if len(execArgs) > 0 {
+			execStart += " " + strings.Join(execArgs, " ")
+		}
+		fmt.Println("Persistence Mode: CLI Flag Fallback (No profiles found)")
+		fmt.Printf("   -> Systemd will re-apply exact command flags: %s\n", execStart)
+		fmt.Println("   -> Tip: Run 'undervolt-go profile save ac' to switch to dynamic AC/Battery profile persistence.")
 	}
 
 	serviceContent := fmt.Sprintf(`[Unit]
@@ -579,7 +625,6 @@ var (
 	verboseFlag        bool
 	forceFlag          bool
 	tempFlag           int
-	tempBatFlag        int
 	turboFlag          int
 	coreOffset         float64
 	gpuOffset          float64
@@ -602,6 +647,19 @@ func applyFlags() error {
 	}
 
 	msr := ADDRESSES
+
+	// Intel FIVR Safeguard & Delta Check
+	if !math.IsNaN(coreOffset) && math.IsNaN(cacheOffset) {
+		log.Println("Notice: Cache offset missing. Synchronizing Cache offset to Core offset (-" + fmt.Sprintf("%.2f", coreOffset) + " mV).")
+		cacheOffset = coreOffset
+	} else if math.IsNaN(coreOffset) && !math.IsNaN(cacheOffset) {
+		log.Println("Notice: Core offset missing. Synchronizing Core offset to Cache offset (-" + fmt.Sprintf("%.2f", cacheOffset) + " mV).")
+		coreOffset = cacheOffset
+	} else if !math.IsNaN(coreOffset) && !math.IsNaN(cacheOffset) {
+		if math.Abs(coreOffset-cacheOffset) > 100.0 {
+			log.Printf("Warning: Difference between Core (%.2f mV) and Cache (%.2f mV) exceeds 100 mV. Intel FIVR hardware will clamp the maximum delta to ~100 mV.\n", coreOffset, cacheOffset)
+		}
+	}
 
 	// Apply voltage offsets if provided.
 	if !math.IsNaN(coreOffset) {
@@ -631,12 +689,7 @@ func applyFlags() error {
 	}
 
 	// Set temperature targets if provided.
-	discharging := isBatteryDischarging()
-	if discharging && tempBatFlag > 0 {
-		if err := setTemperature(tempBatFlag, msr); err != nil {
-			return err
-		}
-	} else if tempFlag > 0 {
+	 if tempFlag > 0 {
 		if err := setTemperature(tempFlag, msr); err != nil {
 			return err
 		}
@@ -842,8 +895,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&readFlag, "read", false, "Read existing values")
 	rootCmd.PersistentFlags().BoolVar(&verboseFlag, "verbose", false, "Print debug information")
 	rootCmd.PersistentFlags().BoolVar(&forceFlag, "force", false, "Allow setting positive offsets")
-	rootCmd.PersistentFlags().IntVar(&tempFlag, "temp", -1, "Set temperature target on AC (°C)")
-	rootCmd.PersistentFlags().IntVar(&tempBatFlag, "temp-bat", -1, "Set temperature target on battery (°C)")
+	rootCmd.PersistentFlags().IntVar(&tempFlag, "temp", -1, "Set temperature target (°C)")
 	rootCmd.PersistentFlags().IntVar(&turboFlag, "turbo", -1, "Set Intel Turbo (1 disabled, 0 enabled)")
 
 	// Voltage offset flags.
@@ -966,14 +1018,32 @@ var profileSaveCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		base := "profiles." + name + "."
-		viper.Set(base+"planes.core", coreOffset)
-		viper.Set(base+"planes.gpu", gpuOffset)
-		viper.Set(base+"planes.cache", cacheOffset)
-		viper.Set(base+"planes.uncore", uncoreOffset)
-		viper.Set(base+"planes.analogio", analogioOffset)
-		viper.Set(base+"tl.temp", tempFlag)
-		viper.Set(base+"tl.temp-bat", tempBatFlag)
-		viper.Set(base+"turbo", turboFlag)
+
+		msr := ADDRESSES
+
+		// Helper to save flag if set, or fallback to current hardware read to prevent serializing NaN
+		savePlane := func(planeKey, planeName string, flagVal float64) {
+			if !math.IsNaN(flagVal) {
+				viper.Set(base+"planes."+planeKey, flagVal)
+			} else if val, err := readOffset(planeName, msr); err == nil {
+				viper.Set(base+"planes."+planeKey, val)
+			}
+		}
+		savePlane("core", "core", coreOffset)
+		savePlane("gpu", "gpu", gpuOffset)
+		savePlane("cache", "cache", cacheOffset)
+		savePlane("uncore", "uncore", uncoreOffset)
+		savePlane("analogio", "analogio", analogioOffset)
+
+		if tempFlag > 0 {
+			viper.Set(base+"temp", tempFlag)
+		} else if offset, tjMax, err := readTemperature(msr); err == nil {
+			viper.Set(base+"temp", tjMax-offset)
+		}
+		if turboFlag >= 0 {
+			viper.Set(base+"turbo", turboFlag)
+		}
+
 		// Only save P1 if exactly two args were provided
 		if len(p1Args) == 2 {
 			p1_0, err1 := strToFloat64(p1Args[0])
@@ -1040,8 +1110,10 @@ var profileApplyCmd = &cobra.Command{
 		cacheOffset = p.GetFloat64("planes.cache")
 		uncoreOffset = p.GetFloat64("planes.uncore")
 		analogioOffset = p.GetFloat64("planes.analogio")
-		tempFlag = p.GetInt("tl.temp")
-		tempBatFlag = p.GetInt("tl.temp-bat")
+		tempFlag = p.GetInt("temp")
+		if tempFlag <= 0 {
+			tempFlag = p.GetInt("tl.temp") // Fallback for legacy configs
+		}
 		turboFlag = p.GetInt("turbo")
 		/*
 		 *			we can actually do. the only problem is that the values are ints and the flags are strings
