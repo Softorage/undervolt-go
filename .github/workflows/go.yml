@@ -52,7 +52,7 @@ jobs:
     needs: checker
     if: needs.checker.outputs.should_run == 'true'
     runs-on: ubuntu-latest
-    container: golang:1.26-bookworm # Debian Bullseye-based Go container to ensure maximum GLIBC compatibility (GLIBC 2.31). Everything runs as root.
+    container: golang:1.26-bookworm # Debian bookworm-based Go container to ensure maximum GLIBC compatibility. Everything runs as root.
     steps:
     - uses: actions/checkout@v6
       with:
@@ -88,6 +88,8 @@ jobs:
         mkdir -p "undervolt-go-${{ env.GIT_TAG }}" "undervolt-go-pro-${{ env.GIT_TAG }}" public
         cp -r ./undervolt-go "./undervolt-go-${{ env.GIT_TAG }}/" # Copy the binary to the undervolt-go directory
         cp -r ./undervolt-go-pro "./undervolt-go-pro-${{ env.GIT_TAG }}/" # Copy the binary to the undervolt-go-pro directory
+        cp -r ./README.md "./undervolt-go-${{ env.GIT_TAG }}/" || true
+        cp -r ./README.md "./undervolt-go-pro-${{ env.GIT_TAG }}/" || true
         cp -rf ./dist/script/cli/* "./undervolt-go-${{ env.GIT_TAG }}/" || true # Copy the install scripts to the undervolt-go directory
         cp -rf ./dist/script/gui/* "./undervolt-go-pro-${{ env.GIT_TAG }}/" || true # Copy the install scripts to the undervolt-go-pro directory
         echo "Ready to deploy!"
