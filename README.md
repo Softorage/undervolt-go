@@ -322,16 +322,20 @@ To build **Undervolt Go**, follow these steps:
          - For `undervolt-go`, you can now use 'Undervolt Go' from any directory. Run the `undervolt-go` command with root privileges:
             - `sudo undervolt-go --help`
          - For `undervolt-go-pro`, you can now launch 'Undervolt Go' from your desktop. Just click or double-click on the 'Undervolt Go' icon to run the graphical version. You will be prompted root password and then the program will run.
+         
+4. I can't undervolt and keep getting error: `set --mV read --mV`?
+  
+   That means undervolting is locked. May be secure boot, Intel Virtualization enabled, or a BIOS update disabled it.
 
-4. Do you use AI to develop this project?
+5. Do you use AI to develop this project?
 
    We may use AI when developing this project. If you find any issues, please report them to us. We will try to fix them as soon as possible.
 
-5. Do you even know how to code?
+6. Do you even know how to code?
 
    Well, kind of. I am fairly confident that I understand the code I maintain (I keep forgetting though). Sometimes, there do appear parts of code (often via LLMs) that work and I don't quite understand how (and I have to ask to understand). But hey, that was the case even in StackOverflow days. I'm pretty dumb in that regard, just not enough to constantly keep messing the code. (-> Sanmay)
 
-6. Which Intel CPUs are supported by Undervolt Go? Does it support iGPU as well?
+7. Which Intel CPUs are supported by Undervolt Go? Does it support iGPU as well?
 
    Undervolt Go supports a range of Intel CPUs, particularly those from the Haswell generation and newer. However, compatibility can vary based on your specific system configuration. See the list from `undervolt by georgewhewell` [here](https://github.com/georgewhewell/undervolt#hardware-support). This tool may or may not work with iGPU though. See [this](https://github.com/georgewhewell/undervolt/issues/196).
 
