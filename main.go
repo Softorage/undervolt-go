@@ -233,20 +233,73 @@ func unpackOffset(msrResponse uint64) float64 {
 	return unconvertOffset(value)
 }
 
-// readTemperature extracts the temperature target.
-func readTemperature(msr MSR) (int, error) {
+// readTemperature extracts the TCC Activation Offset and Hardware TjMax from MSR 0x1A2.
+func readTemperature(msr MSR) (offset int, tjMax int, err error) {
 	val, err := readMSR(msr.addrTemp, 0)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	temp := int((val & (127 << 24)) >> 24)
-	return temp, nil
+	// Bits 23:16 store factory TjMax (°C)
+	tjMax = int((val >> 16) & 0xFF)
+	if tjMax == 0 {
+		tjMax = 100 // Fallback if unread
+	}
+	// Bits 29:24 (0x7F mask) store TCC Activation Offset (°C)
+	offset = int((val >> 24) & 0x7F)
+	return offset, tjMax, nil
 }
 
-// setTemperature sets a new temperature target (in °C).
+// setTemperature sets a new temperature target (°C) using Read-Modify-Write on MSR 0x1A2.
 func setTemperature(temp int, msr MSR) error {
-	value := uint64((100 - temp) << 24)
-	return writeMSR(value, msr.addrTemp)
+	// Read current MSR state
+	val, err := readMSR(msr.addrTemp, 0)
+	if err != nil {
+		return fmt.Errorf("failed to read temperature MSR: %w", err)
+	}
+
+	// Check if TCC Activation Offset is locked by BIOS (Bit 31)
+	if (val & (1 << 31)) != 0 {
+		return fmt.Errorf("cannot set temperature target: MSR 0x1A2 is locked by BIOS (bit 31 set)")
+	}
+
+	// Extract dynamic Hardware TjMax
+	tjMax := int((val >> 16) & 0xFF)
+	if tjMax == 0 {
+		tjMax = 100
+	}
+
+	// Calculate offset
+	offset := tjMax - temp
+	if offset < 0 {
+		return fmt.Errorf("target temperature (%d°C) cannot exceed CPU TjMax (%d°C)", temp, tjMax)
+	}
+	if offset > 63 { // TCC Offset field is typically 6 bits (0-63°C)
+		return fmt.Errorf("target temperature (%d°C) offset (%d°C) is out of bounds", temp, offset)
+	}
+
+	// Read-Modify-Write: Preserve existing bits (including TjMax) and update offset (bits 29:24)
+	mask := uint64(0x7F) << 24
+	writeVal := (val & ^mask) | (uint64(offset) << 24)
+
+	log.Printf("Updating MSR 0x%x: 0x%x -> 0x%x (TjMax: %d°C, Target: %d°C, Offset: %d°C)",
+		msr.addrTemp, val, writeVal, tjMax, temp, offset)
+
+	if err := writeMSR(writeVal, msr.addrTemp); err != nil {
+		return err
+	}
+
+	// Read back to verify execution
+	readBack, err := readMSR(msr.addrTemp, 0)
+	if err != nil {
+		return fmt.Errorf("failed to verify temperature setting: %w", err)
+	}
+
+	readOffset := int((readBack >> 24) & 0x7F)
+	if readOffset != offset {
+		return fmt.Errorf("failed to apply temperature target: set offset %d°C, read offset %d°C (MSR: 0x%x)", offset, readOffset, readBack)
+	}
+
+	return nil
 }
 
 // readOffset sends a "read" command for the voltage offset and returns the measured value.
@@ -578,13 +631,13 @@ func applyFlags() error {
 	}
 
 	// Set temperature targets if provided.
-	if tempFlag >= 0 && tempFlag != 0 {
-		if err := setTemperature(tempFlag, msr); err != nil {
+	discharging := isBatteryDischarging()
+	if discharging && tempBatFlag > 0 {
+		if err := setTemperature(tempBatFlag, msr); err != nil {
 			return err
 		}
-	}
-	if tempBatFlag >= 0 && tempBatFlag != 0 {
-		if err := setTemperature(tempBatFlag, msr); err != nil {
+	} else if tempFlag > 0 {
+		if err := setTemperature(tempFlag, msr); err != nil {
 			return err
 		}
 	}
@@ -652,12 +705,12 @@ func applyFlags() error {
 
 	// If --read is set, print current settings.
 	if readFlag {
-		temp, err := readTemperature(msr)
+		offset, tjMax, err := readTemperature(msr)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Current Settings:\n\n")
-		fmt.Printf("Temperature target: -%d (%d°C)\n", temp, 100-temp)
+		fmt.Printf("Temperature target: -%d (%d°C) [TjMax: %d°C]\n", offset, tjMax-offset, tjMax)
 		fmt.Printf("Voltage Offsets:\n")
 		for plane := range planes {
 			voltage, err := readOffset(plane, msr)
