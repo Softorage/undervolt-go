@@ -143,7 +143,6 @@ type AppGUI struct {
 	p2Power      *infoEntry
 	p2Time       *infoEntry
 	tempEntry    *infoEntry
-	tempBatEntry *infoEntry
 	forceCheck   *infoCheck
 	lockCheck    *infoCheck
 	verboseCheck *infoCheck
@@ -271,10 +270,6 @@ func (g *AppGUI) initWidgets() {
 	g.tempEntry.SetPlaceHolder("AC °C")
 	g.tempEntry.Validator = intValidator
 
-	g.tempBatEntry = newInfoEntry("Maximum temperature on battery (°C).", g.showWarning)
-	g.tempBatEntry.SetPlaceHolder("Battery °C")
-	g.tempBatEntry.Validator = intValidator
-
 	// Settings
 	g.persistCheck = widget.NewCheck(
 		"Persist",
@@ -367,9 +362,6 @@ func (g *AppGUI) collect() []string {
 	}
 	if g.tempEntry.Text != "" {
 		args = append(args, "--temp="+g.tempEntry.Text)
-	}
-	if g.tempBatEntry.Text != "" {
-		args = append(args, "--temp-bat="+g.tempBatEntry.Text)
 	}
 	if g.p1Power.Text != "" && g.p1Time.Text != "" {
 		args = append(args, "--p1="+g.p1Power.Text+","+g.p1Time.Text)
@@ -498,8 +490,7 @@ func (g *AppGUI) buildPowerLimitTab() fyne.CanvasObject {
 
 func (g *AppGUI) buildTempLimitTab() fyne.CanvasObject {
 	tempGrid := container.New(layout.NewFormLayout(),
-		widget.NewLabel("AC Temp (°C)"), g.tempEntry,
-		widget.NewLabel("Battery Temp (°C)"), g.tempBatEntry,
+		widget.NewLabel("Max Temp (°C)"), g.tempEntry,
 	)
 	return container.NewPadded(
 		container.NewVBox(
@@ -594,8 +585,10 @@ func (g *AppGUI) buildProfilesBar() fyne.CanvasObject {
 					cacheOffset := p.GetFloat64("planes.cache")
 					uncoreOffset := p.GetFloat64("planes.uncore")
 					analogioOffset := p.GetFloat64("planes.analogio")
-					tempFlag := p.GetInt("tl.temp")
-					tempBatFlag := p.GetInt("tl.temp-bat")
+					tempFlag = p.GetInt("temp")
+					if tempFlag <= 0 {
+						tempFlag = p.GetInt("tl.temp") // Fallback for legacy configs
+					}
 					turboFlag := p.GetInt("turbo")
 					// we use p.GetIntSlice here as the values are int. we couldn't in main.go as the flags were string.
 					p1Args := p.GetIntSlice("pl.p1")
@@ -646,7 +639,6 @@ func (g *AppGUI) buildProfilesBar() fyne.CanvasObject {
 					}
 
 					g.tempEntry.SetText(fmt.Sprintf("%d", tempFlag))
-					g.tempBatEntry.SetText(fmt.Sprintf("%d", tempBatFlag))
 
 					turboProfile := ""
 					for option, value := range g.turboOptions {
